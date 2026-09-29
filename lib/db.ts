@@ -19,7 +19,8 @@ if (!global.mongooseCache) {
 }
 
 export async function connectDB(): Promise<typeof mongoose | null> {
-  if (!MONGODB_URI) {
+  const uri = process.env.MONGODB_URI;
+  if (!uri || uri.trim() === '') {
     // If MONGODB_URI is not set, log friendly message once and return null.
     // The model store will fallback to persistent local store so the app works seamlessly!
     if (process.env.NODE_ENV !== 'production' && !global.__mongodb_warned) {
@@ -42,7 +43,7 @@ export async function connectDB(): Promise<typeof mongoose | null> {
       serverSelectionTimeoutMS: 5000,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((m) => {
+    cached.promise = mongoose.connect(uri, opts).then((m) => {
       console.log('✅ Connected to MongoDB Atlas');
       return m;
     });
