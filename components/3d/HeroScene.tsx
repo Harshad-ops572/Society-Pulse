@@ -281,13 +281,18 @@ function Scene() {
   );
 }
 
-export default function HeroScene() {
+export default function HeroScene({ onLoaded }: { onLoaded?: () => void }) {
   return (
     <div className="w-full h-full relative cursor-grab active:cursor-grabbing">
       <Canvas
         camera={{ position: [0, 5, 12], fov: 42 }}
         dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true }}
+        gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+        onCreated={() => {
+          if (onLoaded) {
+            setTimeout(onLoaded, 50);
+          }
+        }}
       >
         <Scene />
         <OrbitControls

@@ -19,7 +19,7 @@ export type ComplaintStatus =
   | 'rejected'
   | 'reopened';
 
-export type UserRole = 'admin' | 'member';
+export type UserRole = 'admin' | 'member' | 'demo';
 
 export interface TimelineEvent {
   status: ComplaintStatus;
@@ -60,9 +60,14 @@ export interface IComplaint {
   assignedTo?: string | null; // e.g. "Ramesh (Plumber)" or committee user name
   needsManualTriage: boolean;
   aiOverridden: boolean;
+  originalAiCategory?: string | null;
+  originalAiUrgency?: string | null;
+  overriddenBy?: string | null;
   slaDueAt: Date | string;
   resolvedAt?: Date | string | null;
   residentConfirmed?: boolean | null; // true: resolved, false: reopened
+  satisfactionRating?: number | null;
+  isDemo?: boolean;
   timeline: TimelineEvent[];
   internalNotes: InternalNote[];
   createdAt: Date | string;
@@ -106,6 +111,12 @@ export interface IDigest {
   createdAt: Date | string;
 }
 
+export interface IHelplineEntry {
+  name: string;
+  role: string;
+  phone: string;
+}
+
 export interface ISettings {
   _id?: string;
   slaHours: {
@@ -118,6 +129,7 @@ export interface ISettings {
   wings: string[];
   societyName: string;
   totalFlats: number;
+  helpline?: IHelplineEntry[];
 }
 
 export interface AITriageResult {
@@ -134,4 +146,5 @@ export interface AITriageResult {
   duplicateConfidence: number;
   suggestedAssigneeRole: 'plumber' | 'electrician' | 'housekeeping' | 'security' | 'committee';
   suggestedAction: string;
+  isSample?: boolean;
 }

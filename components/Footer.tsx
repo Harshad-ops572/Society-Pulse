@@ -7,6 +7,22 @@ import { Sparkles, PhoneCall, ShieldCheck, Heart } from 'lucide-react';
 
 export default function Footer() {
   const { t, language } = useLanguage();
+  const [helplineList, setHelplineList] = React.useState<Array<{ name: string; role: string; phone: string }>>([
+    { name: 'Security Main Gate', role: 'Security Desk', phone: '+91 00000 00000' },
+    { name: 'Lift AMC Supervisor', role: 'Emergency Escalation', phone: '+91 00000 00000' },
+    { name: 'Electrician Desk', role: 'Electrical Services', phone: '+91 00000 00000' },
+  ]);
+
+  React.useEffect(() => {
+    fetch('/api/public/stats')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.helpline) && data.helpline.length > 0) {
+          setHelplineList(data.helpline);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <footer className="border-t border-white/10 bg-[#080c18] text-slate-400 text-xs py-10 transition-colors">
@@ -68,19 +84,17 @@ export default function Footer() {
             <p className="text-slate-200 font-semibold text-xs tracking-wider uppercase">
               {language === 'hi' ? 'आपातकालीन संपर्क' : 'Society Helpline'}
             </p>
-            <ul className="space-y-1.5 text-slate-400">
-              <li className="flex items-center gap-2">
-                <PhoneCall className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                <span>Security Gate: +91 98200 11223</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <PhoneCall className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-                <span>Lift AMC Emergency: 1800-200-LIFT</span>
-              </li>
-              <li className="flex items-center gap-2">
-                <PhoneCall className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>Electrician Desk: +91 98200 44556</span>
-              </li>
+            <ul className="space-y-1.5 text-slate-400 text-xs">
+              {helplineList
+                .filter((h) => h.phone && h.phone.trim() !== '')
+                .map((item, idx) => (
+                  <li key={idx} className="flex items-center gap-2">
+                    <PhoneCall className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>
+                      {item.name}: <strong className="text-slate-300 font-mono">{item.phone}</strong>
+                    </span>
+                  </li>
+                ))}
             </ul>
           </div>
 
@@ -101,9 +115,7 @@ export default function Footer() {
         <div className="pt-6 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-500 text-[11px]">
           <p>© {new Date().getFullYear()} SocietyPulse. Built for residential communities.</p>
           <p className="flex items-center gap-1">
-            <span>Empowering volunteer committees with</span>
-            <Heart className="w-3 h-3 text-red-500 fill-red-500 inline" />
-            <span>& AI</span>
+            <span>Empowering volunteer committees with AI.</span>
           </p>
         </div>
       </div>

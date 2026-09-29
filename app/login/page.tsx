@@ -51,11 +51,29 @@ export default function LoginPage() {
     }
   };
 
-  // 1-Click Demo Login
+  // 1-Click Fast Demo Logins
   const loginAsDemo = (demoEmail: string, demoPass: string) => {
     setEmail(demoEmail);
     setPassword(demoPass);
     handleLogin(undefined, demoEmail, demoPass);
+  };
+
+  const handleTryAsCommittee = async () => {
+    setLoading(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/auth/demo-login', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Demo login is currently disabled.');
+      }
+      router.push('/dashboard');
+      router.refresh();
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : 'Demo login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -76,6 +94,31 @@ export default function LoginPage() {
 
       {/* Main Glass Form */}
       <div className="glass-panel rounded-2xl p-6 sm:p-8 border border-white/10 shadow-2xl space-y-6">
+        {/* Judge 1-Click Evaluation Banner */}
+        <div className="p-4 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-xs space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="font-extrabold text-cyan-300 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              Evaluation Mode for Judges
+            </span>
+            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              demo role
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-300 leading-snug">
+            Instantly explore ticket triage, 3D digital twin, and daily digest with full committee capabilities.
+          </p>
+          <button
+            type="button"
+            onClick={handleTryAsCommittee}
+            disabled={loading}
+            className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-95 text-white font-extrabold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-cyan-500/20 cursor-pointer disabled:opacity-50"
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>Try as committee member (1-Click)</span>
+          </button>
+        </div>
+
         {errorMessage && (
           <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-200 text-xs flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />

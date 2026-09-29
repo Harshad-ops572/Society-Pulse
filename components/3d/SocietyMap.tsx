@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import { IComplaint } from '@/types';
@@ -18,19 +18,20 @@ function getWingHealth(wing: string, complaints: IComplaint[]) {
     (c) => c.wing === wing && c.status !== 'resolved' && c.status !== 'rejected'
   );
 
-  const hasCritical = wingComplaints.some((c) => c.urgency === 'critical');
-  const hasHigh = wingComplaints.some((c) => c.urgency === 'high');
-  const hasMedium = wingComplaints.some((c) => c.urgency === 'medium');
+  const criticalCount = wingComplaints.filter((c) => c.urgency === 'critical').length;
+  const highCount = wingComplaints.filter((c) => c.urgency === 'high').length;
+  const mediumCount = wingComplaints.filter((c) => c.urgency === 'medium').length;
+  const lowCount = wingComplaints.filter((c) => c.urgency === 'low').length;
 
   let color = '#22c55e'; // Green
   let statusText = 'Normal';
-  if (hasCritical) {
+  if (criticalCount > 0) {
     color = '#ef4444'; // Red
     statusText = 'Critical Alert';
-  } else if (hasHigh) {
+  } else if (highCount > 0) {
     color = '#f97316'; // Amber / Orange
     statusText = 'High Attention';
-  } else if (hasMedium) {
+  } else if (mediumCount > 0) {
     color = '#eab308'; // Yellow
     statusText = 'Moderate Issues';
   }
@@ -39,6 +40,10 @@ function getWingHealth(wing: string, complaints: IComplaint[]) {
     color,
     statusText,
     count: wingComplaints.length,
+    criticalCount,
+    highCount,
+    mediumCount,
+    lowCount,
     complaints: wingComplaints,
   };
 }
@@ -49,6 +54,7 @@ function InteractiveTower({
   height,
   selected,
   onClick,
+  onHover,
   health,
 }: {
   wing: string;
@@ -56,6 +62,7 @@ function InteractiveTower({
   height: number;
   selected: boolean;
   onClick: () => void;
+  onHover?: (hovered: boolean) => void;
   health: { color: string; count: number };
 }) {
   const [hovered, setHovered] = useState(false);
@@ -70,8 +77,12 @@ function InteractiveTower({
       onPointerOver={(e) => {
         e.stopPropagation();
         setHovered(true);
+        if (onHover) onHover(true);
       }}
-      onPointerOut={() => setHovered(false)}
+      onPointerOut={() => {
+        setHovered(false);
+        if (onHover) onHover(false);
+      }}
     >
       {/* Tower Body */}
       <mesh position={[0, height / 2, 0]}>
@@ -139,6 +150,17 @@ export default function SocietyMap({
   onSelectWing,
 }: SocietyMapProps) {
   const [viewMode, setViewMode] = useState<'3d' | '2d'>('3d');
+  const [hoveredWing, setHoveredWing] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isMobile = window.innerWidth < 768;
+      const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (isMobile || prefersReduced) {
+        setViewMode('2d');
+      }
+    }
+  }, []);
 
   const wings = ['A', 'B', 'C', 'D'];
   const towerConfigs = [
@@ -187,6 +209,21 @@ export default function SocietyMap({
 
       {/* Main Canvas / 2D Container */}
       <div className="w-full h-72 sm:h-80 rounded-xl bg-[#070b14] border border-white/5 relative overflow-hidden">
+        {/* Floating Urgency Hover Tooltip */}
+        {hoveredWing && (
+          <div className="absolute top-3 left-3 z-20 p-2.5 rounded-xl bg-black/80 backdrop-blur-md border border-cyan-500/30 text-xs shadow-xl pointer-events-none transition-all">
+            <div className="font-extrabold text-cyan-300 flex items-center gap-1.5">
+              <span>Tower Wing {hoveredWing} Severity Telemetry</span>
+            </div>
+            <div className="flex items-center gap-2.5 mt-1 text-[11px] font-mono">
+              <span className="text-red-400">Critical: {getWingHealth(hoveredWing, complaints).criticalCount}</span>
+              <span className="text-orange-400">High: {getWingHealth(hoveredWing, complaints).highCount}</span>
+              <span className="text-yellow-400">Med: {getWingHealth(hoveredWing, complaints).mediumCount}</span>
+              <span className="text-emerald-400">Low: {getWingHealth(hoveredWing, complaints).lowCount}</span>
+            </div>
+          </div>
+        )}
+
         {viewMode === '3d' ? (
           <Canvas
             camera={{ position: [0, 6, 8], fov: 45 }}
@@ -214,6 +251,7 @@ export default function SocietyMap({
                   height={t.height}
                   selected={selectedWing === t.wing}
                   onClick={() => onSelectWing(selectedWing === t.wing ? null : t.wing)}
+                  onHover={(isHovered) => setHoveredWing(isHovered ? t.wing : null)}
                   health={health}
                 />
               );

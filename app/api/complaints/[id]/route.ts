@@ -14,7 +14,17 @@ export async function GET(
     if (!complaint) {
       return NextResponse.json({ error: 'Complaint not found' }, { status: 404 });
     }
-    return NextResponse.json({ success: true, complaint });
+
+    const session = getSessionFromRequest(req);
+    let outputComplaint = complaint;
+    if (session?.role === 'demo' && complaint.phone) {
+      outputComplaint = {
+        ...complaint,
+        phone: complaint.phone.replace(/(\d{4,6})(\d{4})$/, '••••••$2'),
+      };
+    }
+
+    return NextResponse.json({ success: true, complaint: outputComplaint });
   } catch (err) {
     console.error('Get complaint by ID error:', err);
     return NextResponse.json({ error: 'Failed to fetch complaint' }, { status: 500 });
@@ -65,10 +75,14 @@ export async function PATCH(
     let aiOverridden = complaint.aiOverridden;
     if (category && category !== complaint.category) {
       updates.category = category;
+      updates.originalAiCategory = complaint.originalAiCategory || complaint.category;
+      updates.overriddenBy = actorName || session.name;
       aiOverridden = true;
     }
     if (urgency && urgency !== complaint.urgency) {
       updates.urgency = urgency;
+      updates.originalAiUrgency = complaint.originalAiUrgency || complaint.urgency;
+      updates.overriddenBy = actorName || session.name;
       aiOverridden = true;
     }
     if (urgencyScore !== undefined) {

@@ -21,6 +21,20 @@ const SettingsSchema = new Schema<SettingsDocument>(
     },
     societyName: { type: String, default: 'Greenwood Palms Co-op Housing Society' },
     totalFlats: { type: Number, default: 120 },
+    helpline: {
+      type: [
+        {
+          name: { type: String, required: true },
+          role: { type: String, required: true },
+          phone: { type: String, default: '' },
+        },
+      ],
+      default: [
+        { name: 'Security Main Gate', role: 'Security Desk', phone: '+91 00000 00000' },
+        { name: 'Lift AMC Supervisor', role: 'Emergency Escalation', phone: '+91 00000 00000' },
+        { name: 'Electrician Desk', role: 'Electrical Services', phone: '+91 00000 00000' },
+      ],
+    },
   },
   {
     timestamps: true,

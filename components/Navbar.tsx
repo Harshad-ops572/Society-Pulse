@@ -108,19 +108,22 @@ export default function Navbar() {
               </span>
             </Link>
 
-            <Link
-              href="/dashboard"
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                pathname === '/dashboard'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <LayoutDashboard className="w-4 h-4 text-emerald-400" />
-                {t.navDashboard}
-              </span>
-            </Link>
+            {/* Dashboard: only shown when logged in */}
+            {user && (
+              <Link
+                href="/dashboard"
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  pathname === '/dashboard'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+                  {t.navDashboard}
+                </span>
+              </Link>
+            )}
 
             {user && user.role === 'admin' && (
               <Link
@@ -140,12 +143,13 @@ export default function Navbar() {
           </nav>
 
           {/* Right controls: Language, Theme, Auth */}
-          <div className="hidden md:flex items-center gap-2.5">
-            {/* Language switch */}
+          <div className="flex items-center gap-2 sm:gap-2.5">
+            {/* Single Language switch (Desktop & Mobile consistent placement) */}
             <button
               onClick={() => setLanguage(language === 'en' ? 'hi' : 'en')}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 transition-colors"
-              title="Toggle Language"
+              title="Toggle Language / भाषा बदलें"
+              aria-label="Toggle Language"
             >
               <Languages className="w-3.5 h-3.5 text-cyan-400" />
               <span>{language === 'en' ? 'हिंदी' : 'English'}</span>
@@ -165,47 +169,43 @@ export default function Navbar() {
               )}
             </button>
 
-            {/* Auth button */}
-            {user ? (
-              <div className="flex items-center gap-2 pl-1 border-l border-white/10">
-                <div className="text-right hidden lg:block">
-                  <p className="text-xs font-medium text-slate-200">{user.name}</p>
-                  <p className="text-[10px] text-cyan-400 uppercase tracking-wider">{user.role}</p>
+            {/* Desktop Auth button */}
+            <div className="hidden md:flex items-center">
+              {user ? (
+                <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+                  <div className="text-right hidden lg:block">
+                    <p className="text-xs font-medium text-slate-200">{user.name}</p>
+                    <p className="text-[10px] text-cyan-400 uppercase tracking-wider">{user.role}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{t.navLogout}</span>
+                  </button>
                 </div>
-                <button
-                  onClick={handleLogout}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-colors"
+              ) : (
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 text-white shadow-md shadow-cyan-500/20 transition-all"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>{t.navLogout}</span>
-                </button>
-              </div>
-            ) : (
-              <Link
-                href="/login"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 text-white shadow-md shadow-cyan-500/20 transition-all"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>{t.navLogin}</span>
-              </Link>
-            )}
-          </div>
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>{t.navLogin}</span>
+                </Link>
+              )}
+            </div>
 
-          {/* Mobile hamburger */}
-          <div className="flex items-center gap-2 md:hidden">
-            <button
-              onClick={() => setLanguage(language === 'en' ? 'hi' : 'en')}
-              className="px-2 py-1 rounded text-xs font-semibold bg-white/5 text-slate-200 border border-white/10"
-            >
-              {language === 'en' ? 'हिंदी' : 'EN'}
-            </button>
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 rounded-lg text-slate-300 hover:text-white bg-white/5 border border-white/10"
-              aria-label="Toggle navigation menu"
-            >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
+            {/* Mobile hamburger */}
+            <div className="flex items-center md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="p-2 rounded-lg text-slate-300 hover:text-white bg-white/5 border border-white/10"
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -229,14 +229,19 @@ export default function Navbar() {
             <Search className="w-4 h-4 text-violet-400" />
             {t.navTrack}
           </Link>
-          <Link
-            href="/dashboard"
-            onClick={() => setMobileMenuOpen(false)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-white/5"
-          >
-            <LayoutDashboard className="w-4 h-4 text-emerald-400" />
-            {t.navDashboard}
-          </Link>
+
+          {/* Mobile Dashboard: only shown when logged in */}
+          {user && (
+            <Link
+              href="/dashboard"
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-white/5"
+            >
+              <LayoutDashboard className="w-4 h-4 text-emerald-400" />
+              {t.navDashboard}
+            </Link>
+          )}
+
           {user && user.role === 'admin' && (
             <Link
               href="/admin"
@@ -249,30 +254,28 @@ export default function Navbar() {
           )}
 
           <div className="pt-2 border-t border-white/10 flex items-center justify-between">
-            <button
-              onClick={toggleTheme}
-              className="flex items-center gap-2 text-xs text-slate-400 py-1"
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-violet-400" />}
-              <span>{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
-            </button>
-
             {user ? (
-              <button
-                onClick={handleLogout}
-                className="text-xs text-red-400 font-semibold py-1 flex items-center gap-1"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                {t.navLogout}
-              </button>
+              <div className="flex items-center justify-between w-full">
+                <div>
+                  <p className="text-xs font-medium text-slate-200">{user.name}</p>
+                  <p className="text-[10px] text-cyan-400 uppercase tracking-wider">{user.role}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-red-400 font-semibold py-1 flex items-center gap-1 bg-red-500/10 px-2.5 rounded-lg border border-red-500/20"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  {t.navLogout}
+                </button>
+              </div>
             ) : (
               <Link
                 href="/login"
                 onClick={() => setMobileMenuOpen(false)}
-                className="text-xs text-cyan-400 font-semibold py-1 flex items-center gap-1"
+                className="w-full text-center text-xs text-white font-semibold py-2 px-3 rounded-lg bg-gradient-to-r from-cyan-500 to-violet-600 flex items-center justify-center gap-1.5 shadow-md shadow-cyan-500/20"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                {t.navLogin}
+                <span>{t.navLogin}</span>
               </Link>
             )}
           </div>

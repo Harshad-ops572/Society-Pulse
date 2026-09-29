@@ -112,6 +112,20 @@ export default function ComplaintDetailDrawer({
           </button>
         </div>
 
+        {/* Human Override Log Note */}
+        {complaint.aiOverridden && (
+          <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Human Override:</strong> AI suggested{' '}
+              <span className="underline font-bold">
+                {complaint.originalAiCategory || complaint.originalAiUrgency || 'previous classification'}
+              </span>
+              , changed by {complaint.overriddenBy || 'Committee Volunteer'}
+            </span>
+          </div>
+        )}
+
         {saveSuccess && (
           <div className="p-3 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-semibold flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4" />

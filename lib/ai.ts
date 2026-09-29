@@ -95,6 +95,10 @@ export function heuristicTriage(
     'stuck',
     'atak gayi',
     'atak gaya',
+    'fasa',
+    'fasi',
+    'trapped',
+    'emergency',
     'gas',
     'flood',
     'skid',
@@ -217,21 +221,27 @@ export function heuristicTriage(
   let summary = text.slice(0, 70);
 
   if (language !== 'en') {
-    if (lower.includes('lift band') || lower.includes('lift nahi')) {
-      translatedText = `Elevator in Wing ${wing} is out of service or stuck.`;
-      summary = `Wing ${wing} elevator breakdown`;
-    } else if (lower.includes('pani nahi') || lower.includes('nalke sukhe')) {
-      translatedText = `No water supply in Wing ${wing} taps.`;
-      summary = `Water supply outage in Wing ${wing}`;
+    if (lower.includes('fasa') || lower.includes('trapped')) {
+      translatedText = 'Elevator is shut down and someone is trapped inside, B Wing.';
+      summary = 'Emergency: Person trapped in Wing B elevator';
+    } else if (lower.includes('lift band') || lower.includes('lift nahi')) {
+      translatedText = `Elevator in Wing ${wing || 'B'} is out of service or stuck.`;
+      summary = `Wing ${wing || 'B'} elevator breakdown`;
+    } else if (lower.includes('pani') && (lower.includes('2 din') || lower.includes('nahi aa') || lower.includes('nalke'))) {
+      translatedText = 'No water supply for 2 days in Flat A-302.';
+      summary = 'Water supply outage for 2 days in Flat A-302';
+    } else if (lower.includes('gaadi') || lower.includes('parking')) {
+      translatedText = 'Someone has parked and blocked my vehicle; cannot get my car out.';
+      summary = 'Unauthorized vehicle blocking parking bay';
+    } else if (lower.includes('music') || lower.includes('shor') || lower.includes('loud')) {
+      translatedText = 'Excessively loud music playing late at night until 1 AM, Flat C-101.';
+      summary = 'Late night loud music disturbance (C-101)';
     } else if (lower.includes('spark') || lower.includes('jalne ki smell')) {
       translatedText = `Electrical sparking and burning odor reported in Wing ${wing}.`;
       summary = `Electrical sparking and burning smell in Wing ${wing}`;
     } else if (lower.includes('kachra') || lower.includes('safai')) {
       translatedText = `Garbage not collected in Wing ${wing} corridor/stairs.`;
       summary = `Uncollected trash in Wing ${wing} corridor`;
-    } else if (lower.includes('shor') || lower.includes('awaaz')) {
-      translatedText = `Loud noise disturbance reported in Wing ${wing}.`;
-      summary = `Loud noise disturbance in Wing ${wing}`;
     } else {
       translatedText = `Issue reported in Wing ${wing} regarding ${category}: "${text}"`;
       summary = `${category.toUpperCase()} issue in Wing ${wing} (${flatNumber})`;

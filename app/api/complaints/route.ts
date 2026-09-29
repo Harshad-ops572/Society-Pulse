@@ -10,6 +10,7 @@ import {
 import { triageComplaint } from '@/lib/ai';
 import { complaintSubmitSchema } from '@/lib/validators';
 import { generateComplaintId } from '@/lib/utils';
+import { getSessionFromRequest } from '@/lib/auth';
 import { UrgencyLevel } from '@/types';
 
 // Rate limiting in-memory map (IP-based, 10 submissions per 10 minutes)
@@ -197,10 +198,18 @@ export async function GET(req: NextRequest) {
       search,
     });
 
+    const session = getSessionFromRequest(req);
+    const outputComplaints = session?.role === 'demo'
+      ? complaints.map((c) => ({
+          ...c,
+          phone: c.phone ? c.phone.replace(/(\d{4,6})(\d{4})$/, '••••••$2') : '',
+        }))
+      : complaints;
+
     return NextResponse.json({
       success: true,
-      complaints,
-      count: complaints.length,
+      complaints: outputComplaints,
+      count: outputComplaints.length,
     });
   } catch (err) {
     console.error('Get complaints error:', err);

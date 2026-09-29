@@ -97,6 +97,17 @@ export default function ReportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
+  // Read URL query parameter for prefilled complaint text from demo
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const prefill = params.get('text');
+      if (prefill) {
+        setText(prefill);
+      }
+    }
+  }, []);
+
   // Check speech recognition support
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

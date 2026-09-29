@@ -1,5 +1,7 @@
 # SocietyPulse — AI Complaint Triage for Housing Societies
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-society--pulse--s1pi.vercel.app-emerald.svg)](https://society-pulse-s1pi.vercel.app/)
+[![Judge Demo Script](https://img.shields.io/badge/Judge%20Demo-60s%20Walkthrough-violet.svg)](docs/DEMO.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Next.js-16.3-black.svg)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://react.dev/)
@@ -7,6 +9,9 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS%20v4-38bdf8.svg)](https://tailwindcss.com/)
 
 > **Quiet the WhatsApp complaint chaos.** Transform unstructured resident messages in **English, Hindi, or Hinglish** into an actionable **5-minute daily digest** for housing society managing committees.
+>
+> 🌐 **Live URL:** [https://society-pulse-s1pi.vercel.app/](https://society-pulse-s1pi.vercel.app/)  
+> 📖 **Judge Walkthrough:** [60-Second Demo Guide](docs/DEMO.md)
 
 ---
 

@@ -329,6 +329,87 @@ export default function AdminPage() {
             </div>
           </div>
 
+          {/* Editable Society Helpline Entries */}
+          <div className="pt-4 border-t border-white/10 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-bold text-slate-200">Public Society Helpline Contacts</span>
+                <p className="text-[11px] text-slate-400">Entries with empty phone numbers are hidden from public view.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const current = settings.helpline || [];
+                  setSettings({
+                    ...settings,
+                    helpline: [...current, { name: 'Emergency Helpdesk', role: 'Support', phone: '+91 00000 00000' }],
+                  });
+                }}
+                className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 border border-white/10 transition-colors"
+              >
+                + Add Helpline Entry
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              {(settings.helpline || [
+                { name: 'Security Main Gate', role: 'Security Desk', phone: '+91 00000 00000' },
+                { name: 'Lift AMC Supervisor', role: 'Emergency Escalation', phone: '+91 00000 00000' },
+                { name: 'Electrician Desk', role: 'Electrical Services', phone: '+91 00000 00000' },
+              ]).map((entry, idx) => (
+                <div key={idx} className="flex flex-col sm:flex-row items-center gap-2 p-2.5 rounded-xl bg-black/20 border border-white/5">
+                  <input
+                    type="text"
+                    value={entry.name}
+                    onChange={(e) => {
+                      const list = [...(settings.helpline || [])];
+                      if (!list[idx]) list[idx] = { name: '', role: '', phone: '' };
+                      list[idx].name = e.target.value;
+                      setSettings({ ...settings, helpline: list });
+                    }}
+                    placeholder="Contact Name"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200"
+                  />
+                  <input
+                    type="text"
+                    value={entry.role}
+                    onChange={(e) => {
+                      const list = [...(settings.helpline || [])];
+                      if (!list[idx]) list[idx] = { name: '', role: '', phone: '' };
+                      list[idx].role = e.target.value;
+                      setSettings({ ...settings, helpline: list });
+                    }}
+                    placeholder="Role / Desk"
+                    className="w-full sm:w-36 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200"
+                  />
+                  <input
+                    type="text"
+                    value={entry.phone}
+                    onChange={(e) => {
+                      const list = [...(settings.helpline || [])];
+                      if (!list[idx]) list[idx] = { name: '', role: '', phone: '' };
+                      list[idx].phone = e.target.value;
+                      setSettings({ ...settings, helpline: list });
+                    }}
+                    placeholder="Phone Number"
+                    className="w-full sm:w-44 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const list = (settings.helpline || []).filter((_, i) => i !== idx);
+                      setSettings({ ...settings, helpline: list });
+                    }}
+                    className="px-2 py-1 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                    title="Remove entry"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
