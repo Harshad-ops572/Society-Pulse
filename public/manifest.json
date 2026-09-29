@@ -1,0 +1,16 @@
+{
+  "name": "SocietyPulse — Housing Society AI Complaint Triage",
+  "short_name": "SocietyPulse",
+  "description": "AI-powered complaint triage, tracking, and 5-minute daily digest for housing societies.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1020",
+  "theme_color": "#06b6d4",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
