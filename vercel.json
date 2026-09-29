@@ -3,10 +3,6 @@
     {
       "path": "/api/cron/digest",
       "schedule": "30 2 * * *"
-    },
-    {
-      "path": "/api/cron/escalate",
-      "schedule": "*/30 * * * *"
     }
   ]
 }
