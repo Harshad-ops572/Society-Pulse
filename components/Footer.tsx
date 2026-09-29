@@ -67,11 +67,6 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard" className="hover:text-cyan-400 transition-colors">
-                  {t.navDashboard}
-                </Link>
-              </li>
-              <li>
                 <Link href="/login" className="hover:text-cyan-400 transition-colors">
                   {t.navLogin}
                 </Link>

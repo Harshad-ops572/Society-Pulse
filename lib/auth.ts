@@ -72,3 +72,45 @@ export function clearAuthCookie(response: NextResponse): void {
     maxAge: 0,
   });
 }
+
+/**
+ * Enforce role-based access inside Route Handlers
+ */
+export function requireRole(
+  req: NextRequest,
+  allowedRoles: UserRole[]
+): { authorized: boolean; session?: TokenPayload; response?: NextResponse } {
+  const session = getSessionFromRequest(req);
+  if (!session) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: 'Unauthorized: authentication session required' },
+        { status: 401 }
+      ),
+    };
+  }
+
+  if (!allowedRoles.includes(session.role)) {
+    return {
+      authorized: false,
+      response: NextResponse.json(
+        { error: `Forbidden: role '${session.role}' lacks sufficient privileges for this action` },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { authorized: true, session };
+}
+
+/**
+ * Mask resident phone numbers for demo or public viewers
+ */
+export function maskPhoneNumber(phone?: string | null): string {
+  if (!phone || !phone.trim()) return '';
+  const clean = phone.trim();
+  if (clean.length <= 4) return '••••';
+  return clean.slice(0, 3) + ' ••••• ' + clean.slice(-2);
+}
+

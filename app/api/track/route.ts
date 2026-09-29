@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getComplaintByReadableId } from '@/lib/dataStore';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export async function GET(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit('track', ip, 30, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many status lookups. Please wait a minute.' },
+        { status: 429 }
+      );
+    }
+
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const flat = searchParams.get('flat');
 
     if (!id || id.trim() === '') {
       return NextResponse.json({ error: 'Complaint ID is required' }, { status: 400 });
+    }
+
+    // Reject NoSQL injection characters ($)
+    if (id.includes('$') || (flat && flat.includes('$'))) {
+      return NextResponse.json({ error: 'Invalid search parameters' }, { status: 400 });
     }
 
     const complaint = await getComplaintByReadableId(id.trim());
@@ -34,12 +49,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Strip internal notes and phone numbers for public tracking
+    const sanitizedComplaint = {
+      ...complaint,
+      phone: '',
+      internalNotes: [],
+    };
+
     return NextResponse.json({
       success: true,
-      complaint,
+      complaint: sanitizedComplaint,
     });
   } catch (err) {
     console.error('Track API error:', err);
     return NextResponse.json({ error: 'Failed to look up complaint' }, { status: 500 });
   }
 }
+

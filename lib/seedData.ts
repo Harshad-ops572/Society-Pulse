@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { connectDB } from './db';
 import ComplaintModel from '@/models/Complaint';
@@ -24,9 +25,24 @@ export async function runDatabaseSeed() {
   console.log('🌱 Starting SocietyPulse Database Seed with ~30 Realistic Complaints...');
   await connectDB();
 
-  // 1. Seed Committee Users
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'admin123';
-  const memberPassword = process.env.SEED_MEMBER_PASSWORD || 'member123';
+  // 1. Seed Committee Users (passwords must come from env or be randomly generated per Section 8)
+  const isEnvAdminPass = Boolean(process.env.SEED_ADMIN_PASSWORD);
+  const isEnvMemberPass = Boolean(process.env.SEED_MEMBER_PASSWORD);
+
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(8).toString('hex');
+  const memberPassword = process.env.SEED_MEMBER_PASSWORD || crypto.randomBytes(8).toString('hex');
+
+  console.log('\n🔐 COMMITTEE CREDENTIALS (Generated for this environment):');
+  if (!isEnvAdminPass) {
+    console.log(`   Admin (admin@society.org): ${adminPassword} [generated randomly, set SEED_ADMIN_PASSWORD to override]`);
+  } else {
+    console.log('   Admin (admin@society.org): [configured via SEED_ADMIN_PASSWORD]');
+  }
+  if (!isEnvMemberPass) {
+    console.log(`   Member (secretary@society.org): ${memberPassword} [generated randomly, set SEED_MEMBER_PASSWORD to override]\n`);
+  } else {
+    console.log('   Member (secretary@society.org): [configured via SEED_MEMBER_PASSWORD]\n');
+  }
 
   const passwordHashAdmin = await bcrypt.hash(adminPassword, 10);
   const passwordHashMember = await bcrypt.hash(memberPassword, 10);

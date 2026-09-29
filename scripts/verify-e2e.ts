@@ -76,7 +76,7 @@ async function runVerification() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       email: 'admin@society.org',
-      password: 'admin123',
+      password: process.env.SEED_ADMIN_PASSWORD || 'test-admin-pass',
     }),
   });
   const loginData = await loginRes.json();

@@ -16,12 +16,14 @@ export async function GET(
     }
 
     const session = getSessionFromRequest(req);
-    let outputComplaint = complaint;
-    if (session?.role === 'demo' && complaint.phone) {
-      outputComplaint = {
-        ...complaint,
-        phone: complaint.phone.replace(/(\d{4,6})(\d{4})$/, '••••••$2'),
-      };
+    let outputComplaint = { ...complaint };
+    if (!session) {
+      outputComplaint.phone = '';
+      outputComplaint.internalNotes = [];
+    } else if (session.role === 'demo') {
+      outputComplaint.phone = complaint.phone
+        ? complaint.phone.replace(/(\d{4,6})(\d{4})$/, '••••••$2')
+        : '';
     }
 
     return NextResponse.json({ success: true, complaint: outputComplaint });

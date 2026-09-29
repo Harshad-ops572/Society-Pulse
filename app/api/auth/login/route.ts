@@ -3,9 +3,19 @@ import bcrypt from 'bcryptjs';
 import { getUserByEmail } from '@/lib/dataStore';
 import { loginSchema } from '@/lib/validators';
 import { setAuthCookie, signToken } from '@/lib/auth';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit('login', ip, 10, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please wait 60 seconds.' },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
     const parsed = loginSchema.safeParse(body);
     if (!parsed.success) {

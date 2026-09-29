@@ -8,8 +8,14 @@ export const complaintSubmitSchema = z.object({
   residentName: z.string().min(2, 'Name must be at least 2 characters long'),
   phone: z.string().optional().default(''),
   photoUrl: z.string().optional().default(''),
+  attachmentId: z.string().optional().default(''),
   voiceTranscript: z.string().optional().default(''),
   honeypot: z.string().max(0, 'Spam detected').optional().default(''),
+  confirmedCategory: z
+    .enum(['water', 'lift', 'parking', 'noise', 'cleaning', 'electrical', 'security', 'other'])
+    .optional(),
+  reportSeparately: z.boolean().optional(),
+  idempotencyKey: z.string().optional(),
 });
 
 export const complaintUpdateSchema = z.object({

@@ -1,12 +1,7 @@
 /**
- * Compresses an image client-side to <= 1 MB using HTML Canvas
+ * Compresses an image client-side to <= 300 KB and max 1280px using HTML Canvas
  */
-export async function compressImage(file: File, maxSizeBytes: number = 1024 * 1024): Promise<File> {
-  // If already under max size, return as is
-  if (file.size <= maxSizeBytes) {
-    return file;
-  }
-
+export async function compressImage(file: File, maxSizeBytes: number = 300 * 1024): Promise<File> {
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -18,8 +13,8 @@ export async function compressImage(file: File, maxSizeBytes: number = 1024 * 10
         let width = img.width;
         let height = img.height;
 
-        // Resize down if excessively large
-        const maxDimension = 1600;
+        // Resize down if excessively large (max 1280px)
+        const maxDimension = 1280;
         if (width > maxDimension || height > maxDimension) {
           if (width > height) {
             height = Math.round((height * maxDimension) / width);

@@ -66,7 +66,7 @@ Welcome to **SocietyPulse**, the production-ready AI complaint triage system rep
 
 ---
 
-## 🔑 Quick Demo Credentials
-- **Admin**: `admin@society.org` / `admin123`
-- **Secretary**: `secretary@society.org` / `member123`
-- **Treasurer**: `treasurer@society.org` / `member123`
+## 🔑 Committee Evaluation Access
+- **1-Click Demo Access**: Click **"Try as committee member"** on `/` or `/login` (enabled when `DEMO_MODE=true`).
+- **Production Admin / Secretary**: Passwords are securely generated per environment upon running `npm run seed`, or configured explicitly via `SEED_ADMIN_PASSWORD` / `SEED_MEMBER_PASSWORD` environment variables.
+

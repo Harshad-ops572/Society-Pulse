@@ -263,10 +263,10 @@ export default function ChaosToClarity() {
                 </span>
 
                 <Link
-                  href="/dashboard"
-                  className="text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1 group"
+                  href="/dashboard/import"
+                  className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 group bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/30 transition-colors"
                 >
-                  <span>Committee: import your real group chat</span>
+                  <span>Committee: Import your WhatsApp chat (.txt)</span>
                   <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               </div>

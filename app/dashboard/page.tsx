@@ -28,6 +28,7 @@ import {
   Layers,
   Droplets,
   Timer,
+  MessageSquare,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -353,6 +354,15 @@ export default function DashboardPage() {
           >
             <RefreshCw className={`w-4 h-4 ${dataLoading ? 'animate-spin' : ''}`} />
           </button>
+
+          <Link
+            href="/dashboard/import"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold text-xs transition-all"
+            title="Import WhatsApp Chat Export"
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>Import WhatsApp</span>
+          </Link>
 
           <Link
             href="/report"

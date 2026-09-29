@@ -113,48 +113,74 @@ export function heuristicTriage(
   ];
   const isSafetyRisk = safetyKeywords.some((k) => lower.includes(k));
 
-  // 3. Category Detection
+  // 3. Category Detection with Misspellings & Mixed Script
   let category: ComplaintCategory = 'other';
+  let confidence = 0.45;
+
   if (
     lower.includes('water') ||
     lower.includes('pani') ||
+    lower.includes('paani') ||
+    lower.includes('nai aa raha') ||
+    lower.includes('nahi aa raha') ||
     lower.includes('leak') ||
     lower.includes('nalka') ||
     lower.includes('tank') ||
     lower.includes('pipe') ||
     lower.includes('tap') ||
     lower.includes('flush') ||
-    lower.includes('seepage')
+    lower.includes('seepage') ||
+    lower.includes('पानी') ||
+    lower.includes('नल')
   ) {
     category = 'water';
+    confidence = 0.92;
   } else if (
     lower.includes('lift') ||
     lower.includes('elevator') ||
-    lower.includes('elevator shaft')
+    lower.includes('elevator shaft') ||
+    lower.includes('fasa') ||
+    lower.includes('fasi') ||
+    lower.includes('atak') ||
+    lower.includes('bnd hai') ||
+    lower.includes('band hai') ||
+    lower.includes('लिफ्ट')
   ) {
     category = 'lift';
+    confidence = 0.94;
   } else if (
     lower.includes('spark') ||
     lower.includes('meter') ||
     lower.includes('bijli') ||
+    lower.includes('batti') ||
     lower.includes('light') ||
     lower.includes('power') ||
     lower.includes('wire') ||
     lower.includes('tripping') ||
     lower.includes('switch') ||
-    lower.includes('fuse')
+    lower.includes('fuse') ||
+    lower.includes('current') ||
+    lower.includes('short circuit') ||
+    lower.includes('बिजली') ||
+    lower.includes('करंट')
   ) {
     category = 'electrical';
+    confidence = 0.91;
   } else if (
     lower.includes('park') ||
     lower.includes('car') ||
     lower.includes('vehicle') ||
+    lower.includes('gaadi') ||
+    lower.includes('gadi') ||
     lower.includes('scooter') ||
     lower.includes('bike') ||
     lower.includes('slot') ||
-    lower.includes('ramp')
+    lower.includes('ramp') ||
+    lower.includes('गाड़ी') ||
+    lower.includes('पार्किंग')
   ) {
     category = 'parking';
+    confidence = 0.90;
   } else if (
     lower.includes('clean') ||
     lower.includes('kachra') ||
@@ -164,18 +190,27 @@ export function heuristicTriage(
     lower.includes('sweep') ||
     lower.includes('dust') ||
     lower.includes('staircase') ||
-    lower.includes('corridor')
+    lower.includes('corridor') ||
+    lower.includes('safai') ||
+    lower.includes('कचरा') ||
+    lower.includes('सफाई')
   ) {
     category = 'cleaning';
+    confidence = 0.89;
   } else if (
     lower.includes('shor') ||
     lower.includes('noise') ||
     lower.includes('music') ||
     lower.includes('loud') ||
     lower.includes('party') ||
-    lower.includes('awaaz')
+    lower.includes('awaaz') ||
+    lower.includes('awaz') ||
+    lower.includes('chilla') ||
+    lower.includes('डीजे') ||
+    lower.includes('शोर')
   ) {
     category = 'noise';
+    confidence = 0.88;
   } else if (
     lower.includes('security') ||
     lower.includes('guard') ||
@@ -185,9 +220,16 @@ export function heuristicTriage(
     lower.includes('theft') ||
     lower.includes('visitor') ||
     lower.includes('barrier') ||
-    lower.includes('lock')
+    lower.includes('lock') ||
+    lower.includes('chori') ||
+    lower.includes('सुरक्षा')
   ) {
     category = 'security';
+    confidence = 0.87;
+  }
+
+  if (isSafetyRisk) {
+    confidence = Math.max(confidence, 0.96);
   }
 
   // 4. Urgency Calculation
@@ -319,6 +361,7 @@ export function heuristicTriage(
     urgencyScore,
     urgencyReason,
     isSafetyRisk,
+    confidence,
     location: commonArea || `Wing ${wing} Flat ${flatNumber}`,
     duplicateOfId,
     duplicateConfidence,
@@ -375,6 +418,7 @@ ${existingContext || 'None'}`;
             urgencyScore: { type: Type.INTEGER },
             urgencyReason: { type: Type.STRING },
             isSafetyRisk: { type: Type.BOOLEAN },
+            confidence: { type: Type.NUMBER, description: 'Confidence between 0.0 and 1.0' },
             location: { type: Type.STRING },
             duplicateOfId: { type: Type.STRING, nullable: true },
             duplicateConfidence: { type: Type.NUMBER },
@@ -393,6 +437,7 @@ ${existingContext || 'None'}`;
             'urgencyScore',
             'urgencyReason',
             'isSafetyRisk',
+            'confidence',
             'location',
             'suggestedAssigneeRole',
             'suggestedAction',
@@ -403,6 +448,7 @@ ${existingContext || 'None'}`;
 
     if (response.text) {
       const parsed = JSON.parse(response.text) as AITriageResult;
+      parsed.confidence = typeof parsed.confidence === 'number' ? parsed.confidence : 0.92;
       return parsed;
     }
   } catch (err) {

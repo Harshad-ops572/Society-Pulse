@@ -133,14 +133,10 @@ npm run dev
 
 Open `http://localhost:3000` in your browser.
 
-### Default Committee Logins
-| Role | Email | Password |
-|---|---|---|
-| **President / Admin** | `admin@society.org` | `admin123` |
-| **Secretary / Member** | `secretary@society.org` | `member123` |
-| **Treasurer / Member** | `treasurer@society.org` | `member123` |
+### Committee Authentication & Demo Mode
+- **Judge & Evaluator Demo**: Use the 1-Click **"Try as committee member"** button directly on `/login` or the home page (server-governed when `DEMO_MODE=true`).
+- **Production Admin / Secretary**: Passwords are cryptographically generated per environment upon running `npm run seed` and printed once to stdout, or specified via `SEED_ADMIN_PASSWORD` and `SEED_MEMBER_PASSWORD` in your `.env.local`. No default passwords exist.
 
-*(1-Tap demo buttons are also provided directly on `/login`)*
 
 ---
 

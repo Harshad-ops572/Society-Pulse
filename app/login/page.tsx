@@ -22,19 +22,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleLogin = async (e?: React.FormEvent, customEmail?: string, customPassword?: string) => {
-    if (e) e.preventDefault();
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     setErrorMessage(null);
-
-    const loginEmail = customEmail || email;
-    const loginPassword = customPassword || password;
 
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await res.json();
@@ -49,13 +46,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // 1-Click Fast Demo Logins
-  const loginAsDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
-    handleLogin(undefined, demoEmail, demoPass);
   };
 
   const handleTryAsCommittee = async () => {
@@ -176,42 +166,6 @@ export default function LoginPage() {
             )}
           </button>
         </form>
-
-        {/* 1-Click Fast Demo Logins */}
-        <div className="pt-4 border-t border-white/10 space-y-2.5">
-          <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span>1-Tap Demo Credentials</span>
-          </div>
-
-          <div className="grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              onClick={() => loginAsDemo('admin@society.org', 'admin123')}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-left text-xs text-slate-300 flex items-center justify-between group transition-colors"
-            >
-              <div>
-                <span className="font-bold text-cyan-300">Vikram Malhotra</span>
-                <span className="text-slate-400 ml-1.5">(Admin / President)</span>
-                <p className="text-[11px] text-slate-500">admin@society.org</p>
-              </div>
-              <UserCheck className="w-4 h-4 text-cyan-400 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => loginAsDemo('secretary@society.org', 'member123')}
-              className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/5 text-left text-xs text-slate-300 flex items-center justify-between group transition-colors"
-            >
-              <div>
-                <span className="font-bold text-violet-300">Ananya Deshmukh</span>
-                <span className="text-slate-400 ml-1.5">(Secretary / Member)</span>
-                <p className="text-[11px] text-slate-500">secretary@society.org</p>
-              </div>
-              <UserCheck className="w-4 h-4 text-violet-400 opacity-60 group-hover:opacity-100 transition-opacity" />
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

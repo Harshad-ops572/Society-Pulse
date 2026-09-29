@@ -16,6 +16,9 @@ import { UrgencyLevel } from '@/types';
 // Rate limiting in-memory map (IP-based, 10 submissions per 10 minutes)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
+// Idempotency map to prevent duplicate submissions on network retries
+const idempotencyMap = new Map<string, { complaint: any; createdAt: number }>();
+
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
   const record = rateLimitMap.get(ip);
@@ -63,35 +66,55 @@ export async function POST(req: NextRequest) {
       residentName,
       phone,
       photoUrl,
+      attachmentId,
       voiceTranscript,
+      confirmedCategory,
+      reportSeparately,
+      idempotencyKey,
     } = parsed.data;
+
+    // Check Idempotency key to prevent duplicate tickets on network retries
+    if (idempotencyKey && idempotencyMap.has(idempotencyKey)) {
+      const existing = idempotencyMap.get(idempotencyKey)!;
+      return NextResponse.json({
+        success: true,
+        complaint: existing.complaint,
+        isIdempotent: true,
+        message: `Complaint retrieved. Your ID is ${existing.complaint.complaintId}`,
+      });
+    }
 
     // 1. Fetch recent open complaints in this wing for duplicate detection
     const recentWingComplaints = await getRecentWingComplaints(wing);
 
-    // 2. Run AI Triage
+    // 2. Run AI Triage with 8-second timeout
     let triageResult;
     let needsManualTriage = false;
     try {
-      triageResult = await triageComplaint(
+      const triagePromise = triageComplaint(
         text,
         wing,
         flatNumber,
         commonArea,
         recentWingComplaints
       );
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI triage timed out (>8s)')), 8000)
+      );
+      triageResult = await Promise.race([triagePromise, timeoutPromise]);
     } catch (err) {
-      console.error('Triage error, using fallback:', err);
+      console.error('Triage error, using manual fallback:', err);
       needsManualTriage = true;
       triageResult = {
         language: 'en' as const,
         translatedText: text,
         summary: text.slice(0, 60),
-        category: 'other' as const,
+        category: confirmedCategory || ('other' as const),
         urgency: 'medium' as const,
         urgencyScore: 50,
         urgencyReason: 'AI triage timeout - flagged for manual review',
         isSafetyRisk: false,
+        confidence: 0.5,
         location: commonArea || `Wing ${wing} Flat ${flatNumber}`,
         duplicateOfId: null,
         duplicateConfidence: 0,
@@ -112,9 +135,9 @@ export async function POST(req: NextRequest) {
     const hours = slaHoursMap[urgencyKey] || 24;
     const slaDueAt = new Date(Date.now() + hours * 60 * 60 * 1000);
 
-    // 5. Duplicate handling
+    // 5. Duplicate handling (honour resident's reportSeparately choice)
     let duplicateOf: string | null = null;
-    if (triageResult.duplicateOfId) {
+    if (triageResult.duplicateOfId && !reportSeparately) {
       const parent = await getComplaintByReadableId(triageResult.duplicateOfId);
       if (parent) {
         duplicateOf = parent.complaintId;
@@ -130,6 +153,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Determine final category (honour confirmedCategory from resident)
+    const finalCategory = confirmedCategory || triageResult.category || 'other';
+    const isResidentOverride = Boolean(confirmedCategory && confirmedCategory !== triageResult.category);
+
     // 6. Create Complaint
     const newComplaint = await createComplaint({
       complaintId,
@@ -137,7 +164,7 @@ export async function POST(req: NextRequest) {
       translatedText: triageResult.translatedText || text,
       language: triageResult.language || 'en',
       summary: triageResult.summary || text.slice(0, 50),
-      category: triageResult.category || 'other',
+      category: finalCategory,
       urgency: triageResult.urgency || 'medium',
       urgencyScore: triageResult.urgencyScore || 50,
       urgencyReason: triageResult.urgencyReason || '',
@@ -149,28 +176,48 @@ export async function POST(req: NextRequest) {
       residentName,
       phone: phone || '',
       photoUrl: photoUrl || '',
+      attachmentId: attachmentId || null,
       voiceTranscript: voiceTranscript || '',
       duplicateOf,
       reportCount: 1,
       assignedTo: null,
       needsManualTriage,
-      aiOverridden: false,
+      aiOverridden: isResidentOverride,
+      originalAiCategory: isResidentOverride ? triageResult.category : undefined,
+      overriddenBy: isResidentOverride ? 'Resident Confirmation' : undefined,
       slaDueAt,
       timeline: [
         {
           status: 'new',
-          note: `Complaint submitted by ${residentName} (${flatNumber}). AI triaged as ${triageResult.urgency.toUpperCase()} (${triageResult.category}).`,
-          by: 'Resident & AI Triage',
+          note: `Complaint submitted by ${residentName} (${flatNumber}). ${
+            needsManualTriage
+              ? 'Flagged for manual committee review.'
+              : `AI triaged as ${triageResult.urgency.toUpperCase()} (${finalCategory}).`
+          }`,
+          by: needsManualTriage ? 'Resident (Manual Review Needed)' : 'Resident & AI Triage',
           at: new Date(),
         },
       ],
       internalNotes: [],
     });
 
+    if (idempotencyKey) {
+      idempotencyMap.set(idempotencyKey, {
+        complaint: newComplaint,
+        createdAt: Date.now(),
+      });
+    }
+
+    const message = needsManualTriage
+      ? `Saved. The committee will review it manually. Your ID is ${complaintId}`
+      : `Complaint registered successfully. Your ID is ${complaintId}`;
+
     return NextResponse.json({
       success: true,
       complaint: newComplaint,
       triage: triageResult,
+      needsManualTriage,
+      message,
     });
   } catch (err) {
     console.error('Submit complaint route error:', err);

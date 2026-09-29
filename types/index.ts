@@ -54,6 +54,7 @@ export interface IComplaint {
   residentName: string;
   phone?: string;
   photoUrl?: string;
+  attachmentId?: string | null;
   voiceTranscript?: string;
   duplicateOf?: string | null; // complaintId or ID of parent
   reportCount: number;
@@ -68,6 +69,7 @@ export interface IComplaint {
   residentConfirmed?: boolean | null; // true: resolved, false: reopened
   satisfactionRating?: number | null;
   isDemo?: boolean;
+  importBatchId?: string | null;
   timeline: TimelineEvent[];
   internalNotes: InternalNote[];
   createdAt: Date | string;
@@ -141,6 +143,7 @@ export interface AITriageResult {
   urgencyScore: number;
   urgencyReason: string;
   isSafetyRisk: boolean;
+  confidence: number; // 0.0 to 1.0 confidence score
   location: string;
   duplicateOfId: string | null;
   duplicateConfidence: number;

@@ -67,6 +67,7 @@ export default function ReportPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [attachmentId, setAttachmentId] = useState<string>('');
 
   // Location & Resident
   const [wing, setWing] = useState('A');
@@ -86,18 +87,34 @@ export default function ReportPage() {
     isSafetyRisk: boolean;
     summary: string;
     translatedText: string;
+    confidence: number;
+    duplicateOfId?: string | null;
   } | null>(null);
+
+  // AI confidence & mistake confirmation state
+  const [confirmedCategory, setConfirmedCategory] = useState<ComplaintCategory>('other');
+  const [categoryConfirmed, setCategoryConfirmed] = useState(false);
+  const [reportSeparately, setReportSeparately] = useState(false);
+  const [duplicateCandidate, setDuplicateCandidate] = useState<string | null>(null);
+
+  // Network & Idempotency Resilience
+  const [isNetworkOffline, setIsNetworkOffline] = useState(false);
+  const [networkError, setNetworkError] = useState(false);
+  const [idempotencyKey] = useState<string>(
+    () => `draft-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+  );
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [submissionMessage, setSubmissionMessage] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
-  // Read URL query parameter for prefilled complaint text from demo
+  // 1. Read URL query parameter for prefilled complaint text from demo
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -107,6 +124,64 @@ export default function ReportPage() {
       }
     }
   }, []);
+
+  // 2. Draft Autosave: Restore saved draft from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const draft = localStorage.getItem('society_report_draft');
+      if (draft) {
+        try {
+          const parsed = JSON.parse(draft);
+          if (parsed.text && !text) setText(parsed.text);
+          if (parsed.wing) setWing(parsed.wing);
+          if (parsed.flatNumber) setFlatNumber(parsed.flatNumber);
+          if (parsed.residentName) setResidentName(parsed.residentName);
+          if (parsed.phone) setPhone(parsed.phone);
+          if (parsed.commonArea) setCommonArea(parsed.commonArea);
+        } catch {}
+      }
+    }
+  }, []);
+
+  // 3. Draft Autosave: Save inputs locally so user never loses their complaint
+  useEffect(() => {
+    if (typeof window !== 'undefined' && step < 4) {
+      if (text.trim() || flatNumber.trim() || residentName.trim()) {
+        localStorage.setItem(
+          'society_report_draft',
+          JSON.stringify({
+            text,
+            wing,
+            flatNumber,
+            residentName,
+            phone,
+            commonArea,
+          })
+        );
+      }
+    }
+  }, [text, wing, flatNumber, residentName, phone, commonArea, step]);
+
+  // 4. Online/Offline network monitoring with auto-retry
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsNetworkOffline(false);
+      if (networkError) {
+        setNetworkError(false);
+        setErrorMessage(null);
+      }
+    };
+    const handleOffline = () => {
+      setIsNetworkOffline(true);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [networkError]);
 
   // Check speech recognition support
   useEffect(() => {
@@ -128,9 +203,13 @@ export default function ReportPage() {
         isSafetyRisk: triage.isSafetyRisk,
         summary: triage.summary,
         translatedText: triage.translatedText,
+        confidence: triage.confidence,
+        duplicateOfId: triage.duplicateOfId,
       });
       setSelectedCategory(triage.category);
+      setConfirmedCategory(triage.category);
       setSelectedUrgency(triage.urgency);
+      setDuplicateCandidate(triage.duplicateOfId || null);
     }
   }, [text, wing, flatNumber, commonArea]);
 
@@ -217,6 +296,9 @@ export default function ReportPage() {
         body: formData,
       });
       const data = await res.json();
+      if (data.attachmentId) {
+        setAttachmentId(data.attachmentId);
+      }
       if (data.url) {
         setPhotoUrl(data.url);
       }
@@ -232,6 +314,7 @@ export default function ReportPage() {
     if (photoPreview) URL.revokeObjectURL(photoPreview);
     setPhotoPreview(null);
     setPhotoUrl('');
+    setAttachmentId('');
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -257,8 +340,12 @@ export default function ReportPage() {
           residentName,
           phone,
           photoUrl,
+          attachmentId,
           voiceTranscript,
           honeypot,
+          confirmedCategory,
+          reportSeparately,
+          idempotencyKey,
         }),
       });
 
@@ -268,7 +355,15 @@ export default function ReportPage() {
       }
 
       setSubmittedId(data.complaint.complaintId);
+      if (data.message) {
+        setSubmissionMessage(data.message);
+      }
       setStep(4);
+      setNetworkError(false);
+
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('society_report_draft');
+      }
 
       // Trigger celebration confetti
       confetti({
@@ -278,7 +373,14 @@ export default function ReportPage() {
         colors: ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b'],
       });
     } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+      if (typeof window !== 'undefined' && !navigator.onLine) {
+        setNetworkError(true);
+        setErrorMessage(
+          'No internet connection. Your draft is safely saved. We will auto-retry when you are back online.'
+        );
+      } else {
+        setErrorMessage(err instanceof Error ? err.message : 'Submission failed. Please try again.');
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -383,10 +485,12 @@ export default function ReportPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-300">
-                      {language === 'hi' ? 'बोलकर दर्ज करें' : 'Hold-to-Record Voice'}
+                      {language === 'hi' ? 'बोलकर दर्ज करें' : 'Voice Input'}
                     </span>
-                    <span className="px-2 py-0.5 text-[10px] font-semibold rounded bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                      Web Speech API
+                    <span className="text-[11px] text-cyan-300/80 hidden sm:inline">
+                      {language === 'hi'
+                        ? 'माइक दबाकर रखें और हिंदी या अंग्रेजी में बोलें'
+                        : 'Press and hold the mic and speak in Hindi or English'}
                     </span>
                   </div>
 
@@ -436,13 +540,16 @@ export default function ReportPage() {
                     ) : (
                       <p className="text-xs text-slate-400 italic">
                         {language === 'hi'
-                          ? 'बटन दबाकर रखें और अपनी समस्या बोलें'
-                          : 'Press & hold the mic button while speaking in Hindi or English'}
+                          ? 'माइक दबाकर रखें और अपनी समस्या बोलें'
+                          : 'Press and hold the mic and speak in Hindi or English'}
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-amber-400">{t.speechNotSupported}</p>
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>{t.speechNotSupported}</span>
+                  </div>
                 )}
 
                 {voiceTranscript && (
@@ -561,6 +668,16 @@ export default function ReportPage() {
                       placeholder="e.g. 402 or B-402"
                       className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-sm font-medium"
                     />
+                    {!flatNumber.trim() && (
+                      <p className="text-[11px] text-cyan-400/90 mt-1.5 flex items-center gap-1">
+                        <span>ℹ️</span>
+                        <span>
+                          {language === 'hi'
+                            ? 'कृपया अपना फ्लैट नंबर दर्ज करें (उदा. 402 या B-402) ताकि मेंटेनेंस टीम आसानी से पहुंच सके।'
+                            : 'Please enter your flat number (e.g. 402 or B-402) so the maintenance crew can find you.'}
+                        </span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -732,6 +849,106 @@ export default function ReportPage() {
                 )}
               </div>
 
+              {/* AI Confidence & Category Confirmation */}
+              {((aiDetected && aiDetected.confidence < 0.7) || selectedCategory === 'other' || !categoryConfirmed) && (
+                <div className="p-4 rounded-xl bg-violet-950/40 border border-violet-500/30 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <p className="text-xs text-slate-200">
+                      We think this is <strong className="text-cyan-300 uppercase tracking-wide">{confirmedCategory}</strong>. Is that right?
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryConfirmed(true)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                        categoryConfirmed
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-gradient-to-r from-cyan-500 to-violet-600 text-white shadow-sm'
+                      }`}
+                    >
+                      {categoryConfirmed ? '✓ Confirmed' : '✓ Yes, that’s right'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 text-xs">
+                    <span className="text-slate-400">Or change to:</span>
+                    <select
+                      value={confirmedCategory}
+                      onChange={(e) => {
+                        const cat = e.target.value as ComplaintCategory;
+                        setConfirmedCategory(cat);
+                        setSelectedCategory(cat);
+                        setCategoryConfirmed(true);
+                      }}
+                      className="bg-black/60 border border-white/20 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    >
+                      <option value="water">Water Supply (पानी)</option>
+                      <option value="lift">Elevator / Lift (लिफ्ट)</option>
+                      <option value="electrical">Electrical & Lighting (बिजली)</option>
+                      <option value="parking">Parking & Vehicles (पार्किंग)</option>
+                      <option value="cleaning">Housekeeping & Waste (सफाई)</option>
+                      <option value="noise">Noise & Disturbance (शोर)</option>
+                      <option value="security">Security & Access (सुरक्षा)</option>
+                      <option value="other">General Maintenance (अन्य)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {/* Duplicate Detection Prompt */}
+              {duplicateCandidate && (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-300">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>Someone already reported this issue in Wing {wing}.</span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-snug">
+                    Would you like to add your report to the existing ticket (elevating priority) or file a separate complaint?
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setReportSeparately(false)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        !reportSeparately
+                          ? 'bg-amber-500/20 text-amber-200 border-amber-500/40 ring-1 ring-amber-500/30'
+                          : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      ✓ Add to existing ({duplicateCandidate})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReportSeparately(true)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        reportSeparately
+                          ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/40 ring-1 ring-cyan-500/30'
+                          : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'
+                      }`}
+                    >
+                      Report separately
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Network Error & Offline Retry Banner */}
+              {networkError && (
+                <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-200 text-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span>No connection. Your draft is preserved. We&apos;ll retry automatically when back online.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 font-bold border border-amber-500/40 cursor-pointer text-xs shrink-0"
+                  >
+                    Retry Now
+                  </button>
+                </div>
+              )}
+
               {/* Resident Summary Verification */}
               <div className="p-4 rounded-xl bg-white/5 border border-white/10 space-y-2 text-xs text-slate-300">
                 <div className="flex justify-between border-b border-white/5 pb-2">
@@ -804,10 +1021,11 @@ export default function ReportPage() {
 
               <div>
                 <h2 className="text-2xl font-extrabold text-slate-100">{t.complaintSubmitted}</h2>
-                <p className="text-sm text-slate-400 mt-1">
-                  {language === 'hi'
-                    ? 'आपकी शिकायत पंजीकृत हो गई है और समिति को सूचित कर दिया गया है।'
-                    : 'Your complaint has been triaged, SLA has been set, and assigned for committee review.'}
+                <p className="text-sm text-slate-300 mt-1">
+                  {submissionMessage ||
+                    (language === 'hi'
+                      ? 'आपकी शिकायत पंजीकृत हो गई है और समिति को सूचित कर दिया गया है।'
+                      : 'Your complaint has been triaged, SLA has been set, and assigned for committee review.')}
                 </p>
               </div>
 

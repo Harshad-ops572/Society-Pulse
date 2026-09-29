@@ -1,10 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { signToken, setAuthCookie } from '@/lib/auth';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = checkRateLimit('demo-login', ip, 15, 60 * 1000);
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: 'Too many demo login requests. Please wait a minute.' },
+        { status: 429 }
+      );
+    }
+
     // Demo login must only work when DEMO_MODE=true
     const isDemoEnabled = process.env.DEMO_MODE === 'true';
 
