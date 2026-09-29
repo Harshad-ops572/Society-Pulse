@@ -1190,18 +1190,39 @@ export async function runDatabaseSeed() {
     },
   ];
 
-  // Database Execution
-  await UserModel.deleteMany({});
-  await UserModel.create(users);
-  console.log(`✅ Seeded ${users.length} authorized committee users (admin@society.org, secretary@society.org, treasurer@society.org).`);
+  // Database Execution (Idempotent upsert by email and stable seedKey per Requirement 4)
+  for (const u of users) {
+    await UserModel.findOneAndUpdate(
+      { email: u.email },
+      { $set: u },
+      { upsert: true, new: true }
+    );
+  }
+  console.log(`✅ Seeded ${users.length} authorized committee users idempotently.`);
 
-  await SettingsModel.deleteMany({});
-  await SettingsModel.create(sampleSettings);
-  console.log('✅ Seeded society configuration & SLA policies with configurable helplines.');
+  const existingSettings = await SettingsModel.findOne();
+  if (!existingSettings) {
+    await SettingsModel.create(sampleSettings);
+    console.log('✅ Seeded society configuration & SLA policies with configurable helplines.');
+  }
 
-  await ComplaintModel.deleteMany({});
-  await ComplaintModel.create(complaints);
-  console.log(`✅ Seeded ${complaints.length} complaints with isDemo: true, recurring Lift B breakdowns (4x), and multi-lingual reports.`);
+  let upsertedComplaintsCount = 0;
+  for (const comp of complaints) {
+    const seedKey = comp.seedKey || `seed-${comp.complaintId}`;
+    await ComplaintModel.findOneAndUpdate(
+      { $or: [{ seedKey }, { complaintId: comp.complaintId }] },
+      {
+        $set: {
+          ...comp,
+          seedKey,
+          isDemo: true,
+        },
+      },
+      { upsert: true, new: true }
+    );
+    upsertedComplaintsCount++;
+  }
+  console.log(`✅ Upserted ${upsertedComplaintsCount} seed complaints idempotently with stable seedKeys.`);
 
   // Generate Today's Autonomous Digest Record
   const todayStr = new Date().toISOString().split('T')[0];

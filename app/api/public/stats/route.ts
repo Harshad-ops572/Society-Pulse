@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
-import { getAllComplaints, getSettings } from '@/lib/dataStore';
+import { getSettings } from '@/lib/dataStore';
+import { getActiveComplaints, getResolvedComplaints } from '@/lib/data/complaints';
+import ComplaintModel from '@/models/Complaint';
+import { connectDB } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const [complaints, settings] = await Promise.all([
-      getAllComplaints(),
+    await connectDB();
+    const [activeComplaints, resolvedComplaints, settings, totalDocsCount] = await Promise.all([
+      getActiveComplaints(),
+      getResolvedComplaints({}, true),
       getSettings(),
+      ComplaintModel.countDocuments(),
     ]);
 
-    // 1. Unresolved complaints
-    const unresolved = complaints.filter(
-      (c) => c.status !== 'resolved' && c.status !== 'rejected'
-    );
-    const activeIssues = unresolved.length;
+    // 1. Strictly active complaints
+    const activeIssues = activeComplaints.length;
 
-    // 2. Counts by category over unresolved complaints
+    // 2. Counts by category over active complaints only
     const validCategories = [
       'water',
       'lift',
@@ -39,7 +42,7 @@ export async function GET() {
       other: 0,
     };
 
-    for (const c of unresolved) {
+    for (const c of activeComplaints) {
       const cat = c.category && (validCategories as readonly string[]).includes(c.category)
         ? c.category
         : 'other';
@@ -49,7 +52,6 @@ export async function GET() {
     // 3. Resolved this month
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const resolvedComplaints = complaints.filter((c) => c.status === 'resolved');
     const resolvedThisMonthComplaints = resolvedComplaints.filter((c) => {
       const rDate = c.resolvedAt ? new Date(c.resolvedAt) : new Date(c.updatedAt);
       return rDate >= startOfMonth;
@@ -72,10 +74,11 @@ export async function GET() {
     const avgResolutionHours =
       countWithDuration > 0 ? Math.round(totalHours / countWithDuration) : null;
 
-    // 5. Satisfaction percentage (strictly computed from real ratings)
+    // 5. Satisfaction percentage (strictly computed from real ratings across all tickets)
+    const allComplaints = [...activeComplaints, ...resolvedComplaints];
     let ratingsCount = 0;
     let positiveRatings = 0;
-    for (const c of complaints) {
+    for (const c of allComplaints) {
       if (typeof c.satisfactionRating === 'number' && c.satisfactionRating > 0) {
         ratingsCount++;
         if (c.satisfactionRating >= 4) positiveRatings++;
@@ -89,7 +92,7 @@ export async function GET() {
 
     // 6. Demo data flag: true if all present records are flagged isDemo
     const isDemoData =
-      complaints.length > 0 && complaints.every((c) => c.isDemo === true);
+      allComplaints.length > 0 && allComplaints.every((c) => c.isDemo === true);
 
     // 7. Helpline numbers
     const helpline =
@@ -111,7 +114,7 @@ export async function GET() {
         countsByCategory,
         isDemoData,
         helpline,
-        totalComplaints: complaints.length,
+        totalComplaints: allComplaints.length,
       },
       {
         headers: {

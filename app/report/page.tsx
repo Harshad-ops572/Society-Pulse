@@ -24,6 +24,7 @@ import {
   Building,
   Sparkles,
   ShieldAlert,
+  MessageCircle,
 } from 'lucide-react';
 
 interface SpeechRecognitionEvent {
@@ -1057,6 +1058,23 @@ export default function ReportPage() {
                   <ArrowRight className="w-4 h-4" />
                 </Link>
 
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `SocietyPulse Complaint Registered!\nTicket ID: ${submittedId}\nTrack live status here: ${
+                      typeof window !== 'undefined'
+                        ? window.location.origin
+                        : 'https://society-pulse-s1pi.vercel.app'
+                    }/track?id=${submittedId}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  title="Share Complaint on WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>Share on WhatsApp</span>
+                </a>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -1067,7 +1085,7 @@ export default function ReportPage() {
                     setSubmittedId(null);
                     setStep(1);
                   }}
-                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-semibold border border-white/10 transition-colors"
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-sm font-semibold border border-white/10 transition-colors cursor-pointer"
                 >
                   {t.submitAnother}
                 </button>

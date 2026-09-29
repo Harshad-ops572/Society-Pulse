@@ -24,6 +24,7 @@ import {
   User,
   Calendar,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 
 function TrackContent() {
@@ -236,6 +237,26 @@ function TrackContent() {
                   })()}
                 </div>
                 <h2 className="text-lg font-bold text-slate-100 mt-2">{complaint.summary}</h2>
+
+                {/* Share on WhatsApp */}
+                <div className="pt-2">
+                  <a
+                    href={`https://wa.me/?text=${encodeURIComponent(
+                      `SocietyPulse Ticket: ${complaint.complaintId} (${complaint.summary})\nCurrent Status: ${complaint.status.toUpperCase()}\nTrack live status here: ${
+                        typeof window !== 'undefined'
+                          ? window.location.href
+                          : `https://society-pulse-s1pi.vercel.app/track?id=${complaint.complaintId}`
+                      }`
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                    title="Share this ticket on WhatsApp"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>Share on WhatsApp</span>
+                  </a>
+                </div>
               </div>
 
               {/* SLA Status Countdown */}

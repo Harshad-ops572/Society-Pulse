@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { getComplaintByReadableId, updateComplaint } from '@/lib/dataStore';
 import { complaintUpdateSchema } from '@/lib/validators';
-import { getSessionFromRequest } from '@/lib/auth';
+import { getSessionFromRequest, requireRole } from '@/lib/auth';
 import { ComplaintStatus, IComplaint, TimelineEvent } from '@/types';
+import ComplaintModel from '@/models/Complaint';
+import { deleteComplaintsWithAttachments, ACTIVE_STATUSES } from '@/lib/data/complaints';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function GET(
   req: NextRequest,
@@ -40,7 +46,6 @@ export async function PATCH(
   try {
     const { id } = await params;
     const session = getSessionFromRequest(req);
-    // Committee action requires auth
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -108,7 +113,39 @@ export async function PATCH(
       updates.status = status;
       if (status === 'resolved') {
         updates.resolvedAt = new Date();
+
+        // Cascade resolve to any linked duplicate child reports (Requirement 4)
+        try {
+          await ComplaintModel.updateMany(
+            {
+              duplicateOf: complaint.complaintId,
+              status: { $in: ACTIVE_STATUSES },
+            },
+            {
+              $set: {
+                status: 'resolved',
+                resolvedAt: new Date(),
+              },
+              $push: {
+                timeline: {
+                  status: 'resolved',
+                  note: `Auto-resolved: primary incident ${complaint.complaintId} was resolved by committee (${
+                    actorName || session.name
+                  }).`,
+                  by: 'AI Auto-Sync',
+                  at: new Date(),
+                },
+              },
+            }
+          );
+        } catch (e) {
+          console.error('Error cascading duplicate resolution:', e);
+        }
+      } else if (status === 'reopened') {
+        updates.resolvedAt = null;
+        updates.archivedAt = null;
       }
+
       updatedTimeline.push({
         status,
         note:
@@ -140,9 +177,62 @@ export async function PATCH(
     updates.internalNotes = updatedInternalNotes;
 
     const saved = await updateComplaint(complaint.complaintId, updates);
+
+    try {
+      revalidatePath('/dashboard');
+      revalidatePath('/');
+    } catch {
+      // ignore
+    }
+
     return NextResponse.json({ success: true, complaint: saved });
   } catch (err) {
     console.error('Update complaint error:', err);
     return NextResponse.json({ error: 'Failed to update complaint' }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE single complaint (admin only, demo role strictly prohibited)
+ */
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = requireRole(req, ['admin']);
+    if (!auth.authorized || !auth.session) {
+      return auth.response!;
+    }
+
+    const { id } = await params;
+    const complaint = await getComplaintByReadableId(id);
+    if (!complaint) {
+      return NextResponse.json({ error: 'Complaint not found' }, { status: 404 });
+    }
+
+    const result = await deleteComplaintsWithAttachments(
+      { complaintId: complaint.complaintId },
+      { name: auth.session.name, role: auth.session.role },
+      `Deleted ticket ${complaint.complaintId} by administrator ${auth.session.name}`,
+      'complaint'
+    );
+
+    try {
+      revalidatePath('/dashboard');
+      revalidatePath('/');
+    } catch {
+      // ignore
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `Ticket ${complaint.complaintId} and linked attachments permanently deleted.`,
+      deletedCount: result.deletedCount,
+      attachmentCount: result.attachmentCount,
+    });
+  } catch (err) {
+    console.error('Delete complaint error:', err);
+    return NextResponse.json({ error: 'Failed to delete complaint' }, { status: 500 });
   }
 }

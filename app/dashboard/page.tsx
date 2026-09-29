@@ -8,6 +8,7 @@ import DailyDigestCard from '@/components/dashboard/DailyDigestCard';
 import KanbanBoard from '@/components/dashboard/KanbanBoard';
 import PriorityQueueTable from '@/components/dashboard/PriorityQueueTable';
 import ComplaintDetailDrawer from '@/components/dashboard/ComplaintDetailDrawer';
+import ResolvedTicketsTab from '@/components/dashboard/ResolvedTicketsTab';
 import InsightsCharts from '@/components/dashboard/InsightsCharts';
 import GuidedTour from '@/components/dashboard/GuidedTour';
 import {
@@ -59,9 +60,11 @@ export default function DashboardPage() {
 
   // Data states
   const [complaints, setComplaints] = useState<IComplaint[]>([]);
+  const [resolvedComplaints, setResolvedComplaints] = useState<IComplaint[]>([]);
+  const [includeArchived, setIncludeArchived] = useState(false);
   const [digest, setDigest] = useState<IDigest | null>(null);
   const [dataLoading, setDataLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'queue' | 'kanban' | 'insights'>('kanban');
+  const [activeTab, setActiveTab] = useState<'queue' | 'kanban' | 'insights' | 'resolved'>('kanban');
 
   // Filter & Drawer state
   const [selectedWing, setSelectedWing] = useState<string | null>(null);
@@ -103,16 +106,21 @@ export default function DashboardPage() {
     try {
       setDataLoading(true);
 
-      const [complaintsRes, digestRes] = await Promise.all([
-        fetch('/api/complaints'),
+      const [complaintsRes, resolvedRes, digestRes] = await Promise.all([
+        fetch('/api/complaints?scope=active'),
+        fetch(`/api/complaints?scope=resolved${includeArchived ? '&includeArchived=true' : ''}`),
         fetch('/api/digest'),
       ]);
 
       const complaintsData = await complaintsRes.json();
+      const resolvedData = await resolvedRes.json();
       const digestData = await digestRes.json();
 
       if (complaintsData.complaints) {
         setComplaints(complaintsData.complaints);
+      }
+      if (resolvedData.complaints) {
+        setResolvedComplaints(resolvedData.complaints);
       }
       if (digestData.digest) {
         setDigest(digestData.digest);
@@ -123,6 +131,17 @@ export default function DashboardPage() {
       setDataLoading(false);
     }
   };
+
+  // Re-fetch resolved tickets when includeArchived toggles
+  useEffect(() => {
+    if (!currentUser) return;
+    fetch(`/api/complaints?scope=resolved${includeArchived ? '&includeArchived=true' : ''}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.complaints) setResolvedComplaints(d.complaints);
+      })
+      .catch((e) => console.error('Error fetching resolved tickets:', e));
+  }, [includeArchived, currentUser]);
 
   // Trigger 8-second Undo Toast
   const triggerUndoToast = (
@@ -154,7 +173,7 @@ export default function DashboardPage() {
     undoTimerRef.current = interval;
   };
 
-  // Execute Undo Action
+  // Execute Undo Action (restores ticket back into active view)
   const handleUndoAction = async () => {
     if (!undoToast) return;
     const { complaintId, previousStatus } = undoToast;
@@ -169,20 +188,21 @@ export default function DashboardPage() {
         body: JSON.stringify({
           status: previousStatus,
           timelineNote: `Undone previous status change. Restored back to ${previousStatus.toUpperCase()}`,
+          actorName: currentUser?.name || 'Committee Member',
         }),
       });
       const data = await res.json();
       if (data.success && data.complaint) {
-        setComplaints((prev) =>
-          prev.map((c) => (c.complaintId === complaintId ? data.complaint : c))
-        );
+        setResolvedComplaints((prev) => prev.filter((c) => c.complaintId !== complaintId));
+        setComplaints((prev) => [data.complaint, ...prev.filter((c) => c.complaintId !== complaintId)]);
       }
     } catch (err) {
       console.error('Undo failed:', err);
+      loadDashboardData();
     }
   };
 
-  // Quick Action from Daily Digest with Undo Toast
+  // Quick Action from Daily Digest with optimistic UI update and Undo Toast
   const handleQuickAction = async (
     complaintId: string,
     nextStatus: 'assigned' | 'in_progress' | 'resolved'
@@ -191,6 +211,24 @@ export default function DashboardPage() {
     if (!existing) return;
 
     const prevStatus = existing.status;
+    const isResolved = nextStatus === 'resolved';
+
+    // Optimistic UI updates
+    if (isResolved) {
+      setComplaints((prev) => prev.filter((c) => c.complaintId !== complaintId));
+      setResolvedComplaints((prev) => [
+        { ...existing, status: nextStatus, resolvedAt: new Date().toISOString() },
+        ...prev.filter((c) => c.complaintId !== complaintId),
+      ]);
+      if (activeDrawerComplaint?.complaintId === complaintId) {
+        setActiveDrawerComplaint(null);
+      }
+      triggerUndoToast(complaintId, prevStatus, nextStatus, existing.summary);
+    } else {
+      setComplaints((prev) =>
+        prev.map((c) => (c.complaintId === complaintId ? { ...c, status: nextStatus } : c))
+      );
+    }
 
     try {
       const res = await fetch(`/api/complaints/${complaintId}`, {
@@ -199,26 +237,48 @@ export default function DashboardPage() {
         body: JSON.stringify({
           status: nextStatus,
           timelineNote: `Status updated to ${nextStatus.toUpperCase()} via 1-Tap Daily Digest`,
+          actorName: currentUser?.name || 'Committee Member',
         }),
       });
       const data = await res.json();
-      if (data.success && data.complaint) {
-        setComplaints((prev) =>
-          prev.map((c) => (c.complaintId === complaintId ? data.complaint : c))
-        );
-        triggerUndoToast(complaintId, prevStatus, nextStatus, existing.summary);
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update status');
       }
+      // Re-validate digest data to keep counts accurate
+      fetch('/api/digest').then((r) => r.json()).then((d) => {
+        if (d.digest) setDigest(d.digest);
+      });
     } catch (err) {
       console.error('Quick action error:', err);
+      // Roll back
+      loadDashboardData();
     }
   };
 
-  // Status Change from Kanban with Undo Toast
+  // Status Change from Kanban with optimistic removal on resolve
   const handleUpdateStatus = async (complaintId: string, nextStatus: ComplaintStatus) => {
     const existing = complaints.find((c) => c.complaintId === complaintId);
     if (!existing) return;
 
     const prevStatus = existing.status;
+    const isResolved = nextStatus === 'resolved' || nextStatus === 'rejected';
+
+    // Optimistic UI updates
+    if (isResolved) {
+      setComplaints((prev) => prev.filter((c) => c.complaintId !== complaintId));
+      setResolvedComplaints((prev) => [
+        { ...existing, status: nextStatus, resolvedAt: new Date().toISOString() },
+        ...prev.filter((c) => c.complaintId !== complaintId),
+      ]);
+      if (activeDrawerComplaint?.complaintId === complaintId) {
+        setActiveDrawerComplaint(null);
+      }
+      triggerUndoToast(complaintId, prevStatus, nextStatus, existing.summary);
+    } else {
+      setComplaints((prev) =>
+        prev.map((c) => (c.complaintId === complaintId ? { ...c, status: nextStatus } : c))
+      );
+    }
 
     try {
       const res = await fetch(`/api/complaints/${complaintId}`, {
@@ -227,17 +287,53 @@ export default function DashboardPage() {
         body: JSON.stringify({
           status: nextStatus,
           timelineNote: `Stage moved to ${nextStatus.toUpperCase()} on Kanban board`,
+          actorName: currentUser?.name || 'Committee Member',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to update kanban status');
+      }
+    } catch (err) {
+      console.error('Kanban status error:', err);
+      // Roll back
+      loadDashboardData();
+    }
+  };
+
+  // Reopen ticket from Resolved archive back to active priority queue
+  const handleReopenComplaint = async (complaintId: string) => {
+    const existing = resolvedComplaints.find((c) => c.complaintId === complaintId);
+    if (!existing) return;
+
+    // Optimistically remove from resolved and re-add to active complaints
+    setResolvedComplaints((prev) => prev.filter((c) => c.complaintId !== complaintId));
+    setComplaints((prev) => [
+      {
+        ...existing,
+        status: 'reopened',
+        reopenedCount: (existing.reopenedCount || 0) + 1,
+      },
+      ...prev.filter((c) => c.complaintId !== complaintId),
+    ]);
+
+    try {
+      const res = await fetch(`/api/complaints/${complaintId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: 'reopened',
+          timelineNote: `Reopened by ${currentUser?.name || 'Committee'}. Returned to active priority queue.`,
+          actorName: currentUser?.name || 'Committee Member',
         }),
       });
       const data = await res.json();
       if (data.success && data.complaint) {
-        setComplaints((prev) =>
-          prev.map((c) => (c.complaintId === complaintId ? data.complaint : c))
-        );
-        triggerUndoToast(complaintId, prevStatus, nextStatus, existing.summary);
+        setComplaints((prev) => [data.complaint, ...prev.filter((c) => c.complaintId !== complaintId)]);
       }
     } catch (err) {
-      console.error('Kanban status error:', err);
+      console.error('Reopen failed:', err);
+      loadDashboardData();
     }
   };
 
@@ -545,6 +641,24 @@ export default function DashboardPage() {
 
           <button
             type="button"
+            onClick={() => setActiveTab('resolved')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              activeTab === 'resolved'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-md shadow-emerald-500/10'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+            }`}
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>Resolved</span>
+            {resolvedComplaints.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                {resolvedComplaints.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('insights')}
             className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'insights'
@@ -586,17 +700,51 @@ export default function DashboardPage() {
         />
       )}
 
+      {activeTab === 'resolved' && (
+        <ResolvedTicketsTab
+          complaints={resolvedComplaints}
+          onSelectComplaint={(c) => setActiveDrawerComplaint(c)}
+          onReopenComplaint={handleReopenComplaint}
+          includeArchived={includeArchived}
+          onToggleArchived={setIncludeArchived}
+        />
+      )}
+
       {activeTab === 'insights' && <InsightsCharts complaints={complaints} />}
 
       {/* Slide-over Complaint Detail Drawer */}
       <ComplaintDetailDrawer
         complaint={activeDrawerComplaint}
+        currentUser={currentUser}
         onClose={() => setActiveDrawerComplaint(null)}
+        onDelete={(id) => {
+          setComplaints((prev) => prev.filter((c) => c.complaintId !== id));
+          setResolvedComplaints((prev) => prev.filter((c) => c.complaintId !== id));
+        }}
         onUpdate={(updated) => {
-          setComplaints((prev) =>
-            prev.map((c) => (c.complaintId === updated.complaintId ? updated : c))
-          );
-          setActiveDrawerComplaint(updated);
+          const isNowResolved = updated.status === 'resolved' || updated.status === 'rejected';
+          const wasActive = complaints.some((c) => c.complaintId === updated.complaintId);
+
+          if (isNowResolved && wasActive) {
+            const prev = complaints.find((c) => c.complaintId === updated.complaintId);
+            setComplaints((cList) => cList.filter((c) => c.complaintId !== updated.complaintId));
+            setResolvedComplaints((rList) => [
+              updated,
+              ...rList.filter((c) => c.complaintId !== updated.complaintId),
+            ]);
+            if (prev) {
+              triggerUndoToast(updated.complaintId, prev.status, updated.status, updated.summary);
+            }
+            setActiveDrawerComplaint(null);
+          } else {
+            setComplaints((prev) =>
+              prev.map((c) => (c.complaintId === updated.complaintId ? updated : c))
+            );
+            setResolvedComplaints((prev) =>
+              prev.map((c) => (c.complaintId === updated.complaintId ? updated : c))
+            );
+            setActiveDrawerComplaint(updated);
+          }
         }}
       />
 

@@ -40,8 +40,9 @@ export default function PriorityQueueTable({
   const [filterWing, setFilterWing] = useState('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  // Filter complaints client-side
+  // Filter complaints client-side (Priority queue strictly displays active complaints)
   const filtered = complaints.filter((c) => {
+    if (c.status === 'resolved' || c.status === 'rejected' || c.archivedAt) return false;
     if (filterCategory !== 'all' && c.category !== filterCategory) return false;
     if (filterStatus !== 'all' && c.status !== filterStatus) return false;
     if (filterUrgency !== 'all' && c.urgency !== filterUrgency) return false;

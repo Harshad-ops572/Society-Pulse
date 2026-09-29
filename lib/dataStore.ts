@@ -65,6 +65,24 @@ function getLocalData(): LocalStoreData {
   return memoryStore;
 }
 
+import {
+  ACTIVE_STATUSES,
+  RESOLVED_STATUSES,
+  activeFilter,
+  resolvedFilter,
+  getActiveComplaints,
+  getResolvedComplaints,
+} from './data/complaints';
+
+export {
+  ACTIVE_STATUSES,
+  RESOLVED_STATUSES,
+  activeFilter,
+  resolvedFilter,
+  getActiveComplaints,
+  getResolvedComplaints,
+};
+
 // ----------------- COMPLAINTS -----------------
 
 export async function getAllComplaints(filters: {
@@ -73,10 +91,24 @@ export async function getAllComplaints(filters: {
   urgency?: string;
   wing?: string;
   search?: string;
+  scope?: 'active' | 'resolved' | 'all';
+  includeArchived?: boolean;
 } = {}): Promise<IComplaint[]> {
+  const scope = filters.scope || (filters.status && filters.status !== 'all' ? 'all' : 'all');
+
+  if (scope === 'active') {
+    return getActiveComplaints(filters);
+  }
+  if (scope === 'resolved') {
+    return getResolvedComplaints(filters, filters.includeArchived);
+  }
+
   const conn = await connectDB();
   if (conn) {
     const query: Record<string, unknown> = {};
+    if (!filters.includeArchived) {
+      query.archivedAt = null;
+    }
     if (filters.status && filters.status !== 'all') query.status = filters.status;
     if (filters.category && filters.category !== 'all') query.category = filters.category;
     if (filters.urgency && filters.urgency !== 'all') query.urgency = filters.urgency;
@@ -98,6 +130,9 @@ export async function getAllComplaints(filters: {
   const store = getLocalData();
   let list = [...store.complaints];
 
+  if (!filters.includeArchived) {
+    list = list.filter((c) => !c.archivedAt);
+  }
   if (filters.status && filters.status !== 'all') {
     list = list.filter((c) => c.status === filters.status);
   }
@@ -122,7 +157,6 @@ export async function getAllComplaints(filters: {
     );
   }
 
-  // Sort by urgency score descending then created date
   list.sort((a, b) => {
     if (b.urgencyScore !== a.urgencyScore) {
       return b.urgencyScore - a.urgencyScore;

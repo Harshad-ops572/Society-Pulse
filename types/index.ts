@@ -70,10 +70,24 @@ export interface IComplaint {
   satisfactionRating?: number | null;
   isDemo?: boolean;
   importBatchId?: string | null;
+  archivedAt?: Date | string | null;
+  seedKey?: string | null;
+  reopenedCount?: number;
   timeline: TimelineEvent[];
   internalNotes: InternalNote[];
   createdAt: Date | string;
   updatedAt: Date | string;
+}
+
+export interface IAuditLog {
+  _id?: string;
+  action: string;
+  actorName: string;
+  actorRole: UserRole;
+  details: string;
+  count: number;
+  targetType: 'complaint' | 'attachment' | 'demo' | 'batch';
+  createdAt: Date | string;
 }
 
 export interface IUser {
@@ -132,6 +146,8 @@ export interface ISettings {
   societyName: string;
   totalFlats: number;
   helpline?: IHelplineEntry[];
+  resolvedArchiveDays?: number;
+  resolvedDeleteAfterDays?: number | null;
 }
 
 export interface AITriageResult {

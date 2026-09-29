@@ -10,6 +10,7 @@
     "seed": "tsx scripts/seed.ts",
     "test:triage": "tsx scripts/test-triage.ts",
     "test:misspellings": "tsx scripts/test-misspellings.ts",
+    "cleanup": "tsx scripts/cleanup.ts",
     "verify:e2e": "tsx scripts/verify-e2e.ts"
   },
   "dependencies": {

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { IComplaint, ComplaintStatus } from '@/types';
 import { getSlaCountdown, getUrgencyBadgeStyle } from '@/lib/utils';
 import {
@@ -12,6 +12,8 @@ import {
   CopyCheck,
   ChevronRight,
   Flame,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 interface KanbanBoardProps {
@@ -24,7 +26,7 @@ const COLUMNS: { id: ComplaintStatus; title: string; color: string }[] = [
   { id: 'new', title: 'New & Triaged', color: 'border-sky-500/40 text-sky-400' },
   { id: 'assigned', title: 'Assigned', color: 'border-violet-500/40 text-violet-400' },
   { id: 'in_progress', title: 'In Progress', color: 'border-amber-500/40 text-amber-400' },
-  { id: 'resolved', title: 'Resolved', color: 'border-emerald-500/40 text-emerald-400' },
+  { id: 'resolved', title: 'Resolved (Last 24h)', color: 'border-emerald-500/40 text-emerald-400' },
 ];
 
 export default function KanbanBoard({
@@ -32,20 +34,35 @@ export default function KanbanBoard({
   onSelectComplaint,
   onUpdateStatus,
 }: KanbanBoardProps) {
+  const [resolvedCollapsed, setResolvedCollapsed] = useState(true);
+  const now = Date.now();
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {COLUMNS.map((col) => {
+        const isResolvedCol = col.id === 'resolved';
+
         const columnComplaints = complaints.filter((c) => {
           if (col.id === 'new') {
             return c.status === 'new' || c.status === 'triaged' || c.status === 'reopened';
           }
+          if (col.id === 'resolved') {
+            if (c.status !== 'resolved') return false;
+            // Only show last 24 hours in Kanban resolved column
+            const rTime = new Date(c.resolvedAt || c.updatedAt).getTime();
+            return now - rTime <= 24 * 60 * 60 * 1000;
+          }
           return c.status === col.id;
         });
+
+        const isCollapsed = isResolvedCol && resolvedCollapsed;
 
         return (
           <div
             key={col.id}
-            className="glass-panel rounded-2xl p-4 border border-white/10 flex flex-col h-[750px] bg-black/20"
+            className={`glass-panel rounded-2xl p-4 border border-white/10 flex flex-col transition-all bg-black/20 ${
+              isCollapsed ? 'h-[160px]' : 'h-[750px]'
+            }`}
           >
             {/* Column Header */}
             <div className={`flex items-center justify-between pb-3 border-b ${col.color} mb-3`}>
@@ -55,7 +72,33 @@ export default function KanbanBoard({
                   {columnComplaints.length}
                 </span>
               </div>
+
+              {isResolvedCol && (
+                <button
+                  type="button"
+                  onClick={() => setResolvedCollapsed((prev) => !prev)}
+                  className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition flex items-center gap-1 text-[11px]"
+                >
+                  <span>{resolvedCollapsed ? 'Expand' : 'Collapse'}</span>
+                  {resolvedCollapsed ? (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              )}
             </div>
+
+            {isCollapsed && (
+              <div
+                onClick={() => setResolvedCollapsed(false)}
+                className="my-auto text-center cursor-pointer p-3 rounded-xl border border-dashed border-slate-700 hover:border-slate-500 text-slate-400 text-xs transition"
+              >
+                <CheckCircle2 className="w-5 h-5 mx-auto text-emerald-400 mb-1" />
+                <span>{columnComplaints.length} resolved in last 24h</span>
+                <p className="text-[10px] text-slate-500 mt-0.5">Click to view or visit Resolved Tab</p>
+              </div>
+            )}
 
             {/* Complaints List in Column */}
             <div className="flex-1 overflow-y-auto space-y-3 pr-1">

@@ -17,18 +17,24 @@ import {
   CheckCircle2,
   CopyCheck,
   RotateCcw,
+  Trash2,
+  AlertOctagon,
 } from 'lucide-react';
 
 interface DrawerProps {
   complaint: IComplaint | null;
+  currentUser?: { name: string; role: string } | null;
   onClose: () => void;
   onUpdate: (updatedComplaint: IComplaint) => void;
+  onDelete?: (complaintId: string) => void;
 }
 
 export default function ComplaintDetailDrawer({
   complaint,
+  currentUser,
   onClose,
   onUpdate,
+  onDelete,
 }: DrawerProps) {
   if (!complaint) return null;
 
@@ -42,6 +48,14 @@ export default function ComplaintDetailDrawer({
   const [residentUpdateNote, setResidentUpdateNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Admin delete state
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   const handleSave = async () => {
     setSaving(true);
@@ -59,7 +73,7 @@ export default function ComplaintDetailDrawer({
           urgencyScore,
           internalNote: internalNoteInput.trim() || undefined,
           timelineNote: residentUpdateNote.trim() || undefined,
-          actorName: 'Committee Member',
+          actorName: currentUser?.name || 'Committee Member',
         }),
       });
 
@@ -69,12 +83,41 @@ export default function ComplaintDetailDrawer({
         setInternalNoteInput('');
         setResidentUpdateNote('');
         setSaveSuccess(true);
-        setTimeout(() => setSaveSuccess(false), 2500);
+        // If ticket was resolved, close drawer immediately so active view updates
+        if (status === 'resolved' || status === 'rejected') {
+          setTimeout(() => {
+            onClose();
+          }, 300);
+        } else {
+          setTimeout(() => setSaveSuccess(false), 2500);
+        }
       }
     } catch (err) {
       console.error('Update drawer error:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteTicket = async () => {
+    if (deleteConfirmId.trim() !== complaint.complaintId) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/complaints/${complaint.complaintId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to delete complaint');
+      }
+      setShowDeleteModal(false);
+      onDelete?.(complaint.complaintId);
+      onClose();
+    } catch (err: unknown) {
+      setDeleteError(err instanceof Error ? err.message : 'Error deleting complaint');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -326,26 +369,99 @@ export default function ComplaintDetailDrawer({
           </div>
         </div>
 
-        {/* Save CTA */}
-        <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
-          >
-            Close
-          </button>
+        {/* Save & Actions CTA */}
+        <div className="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold cursor-pointer"
+            >
+              Close
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmId('');
+                  setDeleteError(null);
+                  setShowDeleteModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold transition-colors cursor-pointer"
+                title="Permanently delete ticket (Admin only)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Ticket</span>
+              </button>
+            )}
+          </div>
 
           <button
             type="button"
             disabled={saving}
             onClick={handleSave}
-            className="flex items-center gap-1.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-cyan-500/20"
+            className="flex items-center justify-center gap-1.5 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 disabled:opacity-50 text-white font-bold text-xs shadow-md shadow-cyan-500/20 cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
             <span>{saving ? 'Saving...' : 'Save All Changes'}</span>
           </button>
         </div>
+
+        {/* Admin Confirmation Modal for Ticket Deletion */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div className="w-full max-w-md rounded-2xl bg-[#0f172a] border border-red-500/40 p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-2.5 text-red-400">
+                <AlertOctagon className="w-5 h-5 shrink-0" />
+                <h3 className="text-sm font-bold text-slate-100">Confirm Ticket Deletion</h3>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed">
+                This action is <strong className="text-red-400">permanent and irreversible</strong>. It will permanently purge complaint <span className="font-mono font-bold text-cyan-300">{complaint.complaintId}</span> and all linked binary attachments from MongoDB, and create an audit log entry.
+              </p>
+
+              <div className="space-y-1.5 text-xs">
+                <label className="block text-slate-400">
+                  Please type <span className="font-mono font-bold text-slate-200 select-all">{complaint.complaintId}</span> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmId}
+                  onChange={(e) => setDeleteConfirmId(e.target.value)}
+                  placeholder={complaint.complaintId}
+                  className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/15 text-slate-100 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+              </div>
+
+              {deleteError && (
+                <div className="p-2.5 rounded-lg bg-red-500/15 border border-red-500/30 text-red-300 text-xs">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  disabled={deleting}
+                  className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteTicket}
+                  disabled={deleteConfirmId.trim() !== complaint.complaintId || deleting}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-red-600/30 transition-all cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{deleting ? 'Deleting...' : 'Permanently Delete'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

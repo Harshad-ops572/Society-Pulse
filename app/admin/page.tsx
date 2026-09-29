@@ -14,7 +14,36 @@ import {
   CheckCircle2,
   AlertTriangle,
   Play,
+  Database,
+  Trash2,
+  RotateCcw,
+  AlertOctagon,
+  History,
+  FileText,
+  Calendar,
+  Archive,
 } from 'lucide-react';
+
+interface DataManagementPreview {
+  counts: {
+    totalComplaints: number;
+    demoComplaints: number;
+    resolvedComplaints: number;
+    resolvedOlderThan30: number;
+    archivedComplaints: number;
+  };
+  importBatches: Array<{ batchId: string; count: number; createdAt: string }>;
+  recentAuditLogs: Array<{
+    _id: string;
+    action: string;
+    actorName: string;
+    actorRole: string;
+    targetType: string;
+    count: number;
+    details?: string;
+    createdAt: string;
+  }>;
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -24,6 +53,23 @@ export default function AdminPage() {
   const [users, setUsers] = useState<IUser[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Data management state
+  const [dataPreview, setDataPreview] = useState<DataManagementPreview | null>(null);
+  const [dataActionLoading, setDataActionLoading] = useState(false);
+  const [dataActionSuccess, setDataActionSuccess] = useState<string | null>(null);
+  const [dataActionError, setDataActionError] = useState<string | null>(null);
+  const [resolvedOlderDaysInput, setResolvedOlderDaysInput] = useState(30);
+  const [selectedBatchId, setSelectedBatchId] = useState('');
+
+  // Confirmation modal state
+  const [pendingAction, setPendingAction] = useState<{
+    type: 'delete_resolved_older' | 'delete_demo' | 'reset_demo' | 'delete_batch';
+    title: string;
+    description: string;
+    count: number;
+    payload?: Record<string, unknown>;
+  } | null>(null);
 
   // New user modal form state
   const [newUserName, setNewUserName] = useState('');
@@ -58,14 +104,51 @@ export default function AdminPage() {
   const loadAdminData = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/settings');
-      const data = await res.json();
+      const [settingsRes, dataRes] = await Promise.all([
+        fetch('/api/settings'),
+        fetch('/api/admin/data-management'),
+      ]);
+      const data = await settingsRes.json();
+      const dataMgmt = await dataRes.json();
       if (data.settings) setSettings(data.settings);
       if (data.users) setUsers(data.users);
+      if (dataMgmt.counts) setDataPreview(dataMgmt);
     } catch (err) {
       console.error('Failed to load settings:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const executeDataAction = async () => {
+    if (!pendingAction) return;
+    setDataActionLoading(true);
+    setDataActionError(null);
+    setDataActionSuccess(null);
+    try {
+      const res = await fetch('/api/admin/data-management', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: pendingAction.type,
+          ...pendingAction.payload,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Action failed');
+      }
+      setDataActionSuccess(data.message || 'Operation executed successfully');
+      setPendingAction(null);
+      // Refresh preview counts and audit logs
+      const refresh = await fetch('/api/admin/data-management');
+      const refreshData = await refresh.json();
+      if (refreshData.counts) setDataPreview(refreshData);
+      setTimeout(() => setDataActionSuccess(null), 5000);
+    } catch (err: unknown) {
+      setDataActionError(err instanceof Error ? err.message : 'Error executing action');
+    } finally {
+      setDataActionLoading(false);
     }
   };
 
@@ -410,10 +493,66 @@ export default function AdminPage() {
             </div>
           </div>
 
+          {/* Section: Data Lifecycle & Retention Policies */}
+          <div className="space-y-4 pt-4 border-t border-white/10">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-200">
+              <Archive className="w-4 h-4 text-cyan-400" />
+              <span>Data Retention & Automatic Archiving</span>
+            </div>
+            <p className="text-xs text-slate-400">
+              Configure background maintenance policies. The automatic cron job archives or cleans up resolved tickets based on these thresholds.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-200">
+                  Automatic Archive Threshold (Days)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.resolvedArchiveDays ?? 30}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      resolvedArchiveDays: parseInt(e.target.value) || 30,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Tickets resolved older than this are archived and hidden from default views (default: 30 days).
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-200">
+                  Permanent Purge Threshold (Days, Optional)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 180 (leave blank to disable)"
+                  value={settings.resolvedDeleteAfterDays ?? ''}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      resolvedDeleteAfterDays: e.target.value ? parseInt(e.target.value) : null,
+                    })
+                  }
+                  className="w-full px-3 py-2 rounded-lg bg-black/40 border border-white/10 text-xs text-slate-100 font-mono focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <p className="text-[11px] text-slate-500">
+                  When set, the cron job permanently purges resolved tickets & attachments older than this (default: off).
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="pt-2 flex justify-end">
             <button
               type="submit"
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 text-white font-bold text-xs shadow-md shadow-cyan-500/20 transition-all"
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-violet-600 hover:opacity-90 text-white font-bold text-xs shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
             >
               <Save className="w-4 h-4" />
               <span>Save Policy Changes</span>
@@ -560,6 +699,336 @@ export default function AdminPage() {
           </table>
         </div>
       </div>
+      {/* Committee Members Table Ends */}
+
+      {/* SECTION: DATA MANAGEMENT & DATABASE CLEANUP (ADMIN ONLY) */}
+      <div className="glass-panel rounded-2xl p-6 sm:p-8 border border-white/10 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-bold text-slate-100">
+                  Data Management & Database Cleanup
+                </h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  Admin Only
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Safely purge stale resolved complaints, reset seed data, clean import batches, and review audit telemetry.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={loadAdminData}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold border border-white/10 transition-colors self-start sm:self-auto cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Refresh Counts</span>
+          </button>
+        </div>
+
+        {/* Feedback Banners */}
+        {dataActionSuccess && (
+          <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{dataActionSuccess}</span>
+          </div>
+        )}
+
+        {dataActionError && (
+          <div className="p-3.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+            <AlertOctagon className="w-4 h-4 shrink-0" />
+            <span>{dataActionError}</span>
+          </div>
+        )}
+
+        {/* Live MongoDB Telemetry Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 text-center">
+            <span className="text-2xl font-black font-mono text-slate-100 block">
+              {dataPreview?.counts.totalComplaints ?? '—'}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">Total Complaints</span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 text-center">
+            <span className="text-2xl font-black font-mono text-cyan-300 block">
+              {dataPreview?.counts.demoComplaints ?? '—'}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">Demo/Seed Data</span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 text-center">
+            <span className="text-2xl font-black font-mono text-emerald-300 block">
+              {dataPreview?.counts.resolvedComplaints ?? '—'}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">Resolved Total</span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 text-center">
+            <span className="text-2xl font-black font-mono text-amber-300 block">
+              {dataPreview?.counts.resolvedOlderThan30 ?? '—'}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">Resolved &gt; 30d</span>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-white/5 border border-white/5 text-center col-span-2 sm:col-span-1">
+            <span className="text-2xl font-black font-mono text-violet-300 block">
+              {dataPreview?.counts.archivedComplaints ?? '—'}
+            </span>
+            <span className="text-[11px] text-slate-400 font-medium">Archived Tickets</span>
+          </div>
+        </div>
+
+        {/* Admin Action Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+          {/* Card 1: Purge Old Resolved Tickets */}
+          <div className="p-4 rounded-xl bg-black/30 border border-white/10 space-y-3 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-amber-400" />
+                Purge Stale Resolved Tickets
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Permanently delete resolved tickets older than X days along with their attachments.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <label className="text-[11px] text-slate-400">Older than:</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={resolvedOlderDaysInput}
+                  onChange={(e) => setResolvedOlderDaysInput(parseInt(e.target.value) || 30)}
+                  className="w-20 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-mono text-slate-100 text-center"
+                />
+                <span className="text-[11px] text-slate-400">days</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() =>
+                setPendingAction({
+                  type: 'delete_resolved_older',
+                  title: `Purge Resolved Tickets Older Than ${resolvedOlderDaysInput} Days`,
+                  description: `This action will permanently purge all tickets marked Resolved or Rejected that are older than ${resolvedOlderDaysInput} days, along with all associated binary attachments.`,
+                  count: dataPreview?.counts.resolvedOlderThan30 ?? 0,
+                  payload: { days: resolvedOlderDaysInput },
+                })
+              }
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Purge Resolved Tickets</span>
+            </button>
+          </div>
+
+          {/* Card 2: Demo & Seed Data Management */}
+          <div className="p-4 rounded-xl bg-black/30 border border-white/10 space-y-3 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <RotateCcw className="w-3.5 h-3.5 text-cyan-400" />
+                Demo & Seed Data Control
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Wipe demonstration tickets ({dataPreview?.counts.demoComplaints ?? 0} records) or restore fresh sample data.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() =>
+                  setPendingAction({
+                    type: 'delete_demo',
+                    title: 'Delete All Demonstration Complaints',
+                    description:
+                      'This action will permanently delete all complaints flagged as demonstration/seed data (isDemo: true) and their attachments.',
+                    count: dataPreview?.counts.demoComplaints ?? 0,
+                  })
+                }
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete All Demo Data</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setPendingAction({
+                    type: 'reset_demo',
+                    title: 'Reset Demo Data to Fresh State',
+                    description:
+                      'This will purge all existing demo data and run an idempotent seed to restore the standard 5 demo tickets, users, and default settings.',
+                    count: dataPreview?.counts.demoComplaints ?? 0,
+                  })
+                }
+                className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Demo Data</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Card 3: Import Batch Cleanup */}
+          <div className="p-4 rounded-xl bg-black/30 border border-white/10 space-y-3 flex flex-col justify-between">
+            <div className="space-y-1.5">
+              <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-violet-400" />
+                Import Batch Removal
+              </span>
+              <p className="text-[11px] text-slate-400">
+                Purge all tickets imported from a specific WhatsApp chat export file.
+              </p>
+
+              <div className="pt-1">
+                <select
+                  value={selectedBatchId}
+                  onChange={(e) => setSelectedBatchId(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-slate-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                >
+                  <option value="">Select Import Batch...</option>
+                  {(dataPreview?.importBatches || []).map((b) => (
+                    <option key={b.batchId} value={b.batchId}>
+                      Batch {b.batchId.slice(0, 8)}... ({b.count} tickets)
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={!selectedBatchId}
+              onClick={() => {
+                const batch = dataPreview?.importBatches.find((b) => b.batchId === selectedBatchId);
+                setPendingAction({
+                  type: 'delete_batch',
+                  title: `Delete Import Batch ${selectedBatchId}`,
+                  description:
+                    'This action will permanently delete all complaints associated with this import batch ID and all attached files.',
+                  count: batch?.count ?? 0,
+                  payload: { batchId: selectedBatchId },
+                });
+              }}
+              className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed text-violet-300 border border-violet-500/30 text-xs font-bold transition-all cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Selected Batch</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Audit Log Table */}
+        <div className="space-y-3 pt-4 border-t border-white/10">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-200">
+            <History className="w-4 h-4 text-cyan-400" />
+            <span>Recent Data Operations &amp; Audit Trail</span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead className="text-slate-400 border-b border-white/10 uppercase tracking-wider text-[10px]">
+                <tr>
+                  <th className="py-2.5 px-3">Timestamp</th>
+                  <th className="py-2.5 px-3">Actor</th>
+                  <th className="py-2.5 px-3">Action</th>
+                  <th className="py-2.5 px-3">Target</th>
+                  <th className="py-2.5 px-3">Records Purged</th>
+                  <th className="py-2.5 px-3">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {(dataPreview?.recentAuditLogs || []).length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-center text-slate-500 text-xs">
+                      No administrative data cleanup operations recorded yet.
+                    </td>
+                  </tr>
+                ) : (
+                  (dataPreview?.recentAuditLogs || []).map((log) => (
+                    <tr key={log._id} className="hover:bg-white/[0.02]">
+                      <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">
+                        {new Date(log.createdAt).toLocaleString('en-IN', {
+                          dateStyle: 'short',
+                          timeStyle: 'short',
+                        })}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-200">
+                        {log.actorName}{' '}
+                        <span className="text-[10px] text-cyan-400">({log.actorRole})</span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-amber-300">
+                        {log.action}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-300">{log.targetType}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-rose-400">
+                        {log.count}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-400 text-[11px] truncate max-w-xs">
+                        {log.details || '—'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Dialog Modal for Admin Data Operations */}
+      {pendingAction && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="w-full max-w-md rounded-2xl bg-[#0f172a] border border-red-500/40 p-6 space-y-4 shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-2.5 text-rose-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h3 className="text-sm font-bold text-slate-100">{pendingAction.title}</h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">{pendingAction.description}</p>
+
+            <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center justify-between text-xs">
+              <span className="text-slate-400">Affected Records:</span>
+              <span className="font-mono font-bold text-rose-400">
+                ~{pendingAction.count} tickets + attachments
+              </span>
+            </div>
+
+            <p className="text-[11px] text-slate-400 italic">
+              *All associated binary attachment files will be simultaneously cleaned up with zero orphaned documents.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-white/10">
+              <button
+                type="button"
+                disabled={dataActionLoading}
+                onClick={() => setPendingAction(null)}
+                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={dataActionLoading}
+                onClick={executeDataAction}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{dataActionLoading ? 'Executing...' : 'Confirm & Execute'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

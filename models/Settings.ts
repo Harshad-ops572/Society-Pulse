@@ -35,6 +35,8 @@ const SettingsSchema = new Schema<SettingsDocument>(
         { name: 'Electrician Desk', role: 'Electrical Services', phone: '+91 00000 00000' },
       ],
     },
+    resolvedArchiveDays: { type: Number, default: 30 },
+    resolvedDeleteAfterDays: { type: Number, default: null },
   },
   {
     timestamps: true,

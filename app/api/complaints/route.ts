@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import {
   createComplaint,
   getAllComplaints,
@@ -11,6 +12,7 @@ import { triageComplaint } from '@/lib/ai';
 import { complaintSubmitSchema } from '@/lib/validators';
 import { generateComplaintId } from '@/lib/utils';
 import { getSessionFromRequest } from '@/lib/auth';
+import ComplaintModel from '@/models/Complaint';
 import { UrgencyLevel } from '@/types';
 
 // Rate limiting in-memory map (IP-based, 10 submissions per 10 minutes)
@@ -84,10 +86,27 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 1. Fetch recent open complaints in this wing for duplicate detection
+    // 1. Check for rapid duplicate submission with identical text & flat in the last 5 minutes
+    const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const duplicateRecent = await ComplaintModel.findOne({
+      flatNumber,
+      originalText: text.trim(),
+      createdAt: { $gte: fiveMinsAgo },
+    }).lean();
+
+    if (duplicateRecent) {
+      return NextResponse.json({
+        success: true,
+        complaint: duplicateRecent,
+        isIdempotent: true,
+        message: `Identical complaint recently submitted from flat ${flatNumber}. Your ID is ${duplicateRecent.complaintId}`,
+      });
+    }
+
+    // 2. Fetch recent open complaints in this wing for duplicate detection
     const recentWingComplaints = await getRecentWingComplaints(wing);
 
-    // 2. Run AI Triage with 8-second timeout
+    // 3. Run AI Triage with 8-second timeout
     let triageResult;
     let needsManualTriage = false;
     try {
@@ -212,6 +231,14 @@ export async function POST(req: NextRequest) {
       ? `Saved. The committee will review it manually. Your ID is ${complaintId}`
       : `Complaint registered successfully. Your ID is ${complaintId}`;
 
+    // Revalidate dashboard and public pages on complaint creation
+    try {
+      revalidatePath('/dashboard');
+      revalidatePath('/');
+    } catch {
+      // ignore
+    }
+
     return NextResponse.json({
       success: true,
       complaint: newComplaint,
@@ -228,21 +255,28 @@ export async function POST(req: NextRequest) {
   }
 }
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const scope = (searchParams.get('scope') as 'active' | 'resolved' | 'all') || 'active';
     const status = searchParams.get('status') || undefined;
     const category = searchParams.get('category') || undefined;
     const urgency = searchParams.get('urgency') || undefined;
     const wing = searchParams.get('wing') || undefined;
     const search = searchParams.get('search') || undefined;
+    const includeArchived = searchParams.get('includeArchived') === 'true';
 
     const complaints = await getAllComplaints({
+      scope,
       status,
       category,
       urgency,
       wing,
       search,
+      includeArchived,
     });
 
     const session = getSessionFromRequest(req);
@@ -257,6 +291,7 @@ export async function GET(req: NextRequest) {
       success: true,
       complaints: outputComplaints,
       count: outputComplaints.length,
+      scope,
     });
   } catch (err) {
     console.error('Get complaints error:', err);
